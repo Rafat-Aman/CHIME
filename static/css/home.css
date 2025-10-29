@@ -1,0 +1,113 @@
+:root{
+  --bg:#0b0c0f;
+  --panel:#12141a;
+  --text:#e7eaf0;
+  --muted:#9aa3b2;
+  --border:#1f2430;
+  --btn:#1b2332;
+  --btn-hover:#222c40;
+  --accent:#4285f4; /* Google blue */
+  --radius:12px;
+  --shadow:0 8px 24px rgba(0,0,0,.25);
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  background:linear-gradient(180deg,#0a0b0d 0%, #0f1420 100%);
+  color:var(--text);
+  font:16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,"Helvetica Neue",Arial,sans-serif;
+}
+
+.container{
+  width:min(100%, 960px);
+  margin-inline:auto;
+  padding-inline:20px;
+}
+
+.header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:18px 0;
+}
+
+.brand{
+  margin:0;
+  font-size:22px;
+  letter-spacing:.3px;
+}
+
+.nav{
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+}
+
+.btn{
+  display:inline-flex;
+  align-items:center;
+  gap:8px;
+  padding:10px 14px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:var(--btn);
+  color:var(--text);
+  text-decoration:none;
+  transition:background .15s ease, transform .02s ease;
+  box-shadow:var(--shadow);
+}
+.btn:hover{ background:var(--btn-hover); }
+.btn:active{ transform:translateY(1px); }
+
+.btn-google{
+  background:linear-gradient(180deg,#1f2738 0%, #182033 100%);
+  border-color:#23304a;
+}
+.btn-google:hover{ background:#203055; }
+
+/* Tiny “G” icon */
+.g-icon{
+  width:16px; height:16px; border-radius:3px; display:inline-block; position:relative;
+  background: conic-gradient(#ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0);
+}
+.g-icon::after{
+  content:""; position:absolute; inset:3px; background:#fff; border-radius:2px;
+}
+
+.messages{
+  margin-top:8px;
+}
+.messages ul{ list-style:none; padding:0; margin:0; display:grid; gap:8px; }
+.msg{
+  background:var(--panel);
+  border:1px solid var(--border);
+  padding:10px 12px;
+  border-radius:10px;
+}
+
+.hero{
+  margin-top:24px;
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:28px;
+  box-shadow:var(--shadow);
+}
+
+.hero-title{ margin:0 0 8px; font-size:28px; }
+.hero-sub{ color:var(--muted); margin:0 0 6px; }
+
+.note{
+  margin-top:14px;
+  color:var(--muted);
+  border-top:1px dashed var(--border);
+  padding-top:12px;
+}
+
+.footer{
+  padding:28px 0 40px;
+  color:var(--muted);
+  text-align:center;
+}

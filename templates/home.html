@@ -1,2 +1,61 @@
-﻿<!doctype html>
-<html><body><h1>It works!</h1></body></html>
+﻿{% load static socialaccount %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>{{ title|default:"Home" }}</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="{% static 'css/home.css' %}" rel="stylesheet" />
+</head>
+<body>
+  <header class="container header">
+    <h1 class="brand">MyProject</h1>
+    <nav class="nav">
+      {% if request.user.is_authenticated %}
+        <a class="btn" href="{% url 'dashboard' %}">Dashboard</a>
+        <a class="btn" href="{% url 'account_logout' %}">Logout</a>
+      {% else %}
+        <a class="btn" href="{% url 'account_login' %}">Login</a>
+        <a class="btn" href="{% url 'register' %}">Register</a>
+        {% if has_google_app %}
+          <a class="btn btn-google" href="{% provider_login_url 'google' %}">
+            <span class="g-icon" aria-hidden="true"></span>
+            Sign in with Google
+          </a>
+        {% endif %}
+      {% endif %}
+    </nav>
+  </header>
+
+  {% if messages %}
+  <section class="container messages">
+    <ul>
+      {% for m in messages %}
+        <li class="msg {{ m.tags }}">{{ m }}</li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <main class="container hero">
+    <h2 class="hero-title">
+      Welcome{% if request.user.is_authenticated %}, {{ request.user.username }}{% endif %}
+    </h2>
+    <p class="hero-sub">
+      Link multiple Google accounts and see Drive storage for each on your dashboard.
+      Tokens are saved, so you don’t have to reconnect after every login.
+    </p>
+
+    {% if not request.user.is_authenticated and not has_google_app %}
+      <p class="note">
+        Google sign-in isn’t configured yet. In <strong>/admin</strong>, set:
+        <em>Sites → 127.0.0.1:8000</em> and <em>Social applications → Google</em>.
+      </p>
+    {% endif %}
+  </main>
+
+  <footer class="container footer">
+    <small>© {{ now|date:"Y" }} MyProject</small>
+  </footer>
+</body>
+</html>

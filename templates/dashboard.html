@@ -1,0 +1,94 @@
+{% load socialaccount %}
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Dashboard</title>
+  <style>
+    body { font-family: system-ui, Arial, sans-serif; max-width: 900px; margin: 2rem auto; }
+    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
+    .card { border:1px solid #e5e7eb; border-radius:10px; padding:1rem; margin-bottom:1rem; }
+    .row { display:flex; align-items:center; gap:12px; }
+    .btn { padding:.5rem .9rem; border:1px solid #ddd; border-radius:8px; text-decoration:none; cursor:pointer; background:#fff; }
+    .btn:hover { background:#f7f7f7; }
+    .btn.small { padding:.35rem .7rem; font-size:.9rem; }
+    img.avatar { height:28px; width:28px; border-radius:50%; object-fit:cover; }
+    .dim { color:#6b7280; }
+    .danger { color:#b91c1c; }
+    .actions { display:flex; gap:8px; align-items:center; }
+    ul.accounts { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:12px; }
+    li.account { display:flex; justify-content:space-between; align-items:center; border:1px solid #e5e7eb; border-radius:10px; padding:.85rem 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Your dashboard</h1>
+    <nav class="actions">
+      <a class="btn" href="{% url 'home' %}">Home</a>
+      <a class="btn" href="{% url 'account_logout' %}">Logout</a>
+    </nav>
+  </header>
+
+  {% if messages %}
+    <ul>
+      {% for m in messages %}<li>{{ m }}</li>{% endfor %}
+    </ul>
+  {% endif %}
+
+  <section class="card">
+    <h2>Connected Google accounts</h2>
+
+    {% if items %}
+      <ul class="accounts">
+        {% for item in items %}
+          {% with acc=item.account data=item.account.extra_data q=item.quota err=item.error %}
+          <li class="account">
+            <div class="row">
+              {% if data.picture %}<img class="avatar" src="{{ data.picture }}" alt="">{% endif %}
+              <div>
+                <div><strong>{{ data.name|default:acc.uid }}</strong></div>
+                <div class="dim">{{ data.email|default:"(no email)" }}</div>
+
+                {% if q %}
+                  <div class="dim">
+                    Drive: used {{ q.usage }} / {{ q.limit }}{% if q.remaining %} (remaining {{ q.remaining }}){% endif %}
+                  </div>
+                {% endif %}
+
+                {% if err %}
+                  <div class="danger">Drive quota error: {{ err }}</div>
+
+                  {# If the token lacks Drive scope, invite re-consent #}
+                  {% if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in err or "insufficientPermissions" in err or "Insufficient Permission" in err %}
+                    <div class="dim" style="margin-top:.35rem;">
+                      This account was connected before Drive access was requested. Re-grant access:
+                    </div>
+                    <div class="actions" style="margin-top:.35rem;">
+                      <a class="btn small" href="{% provider_login_url 'google' process='connect' %}">
+                        Grant Drive access
+                      </a>
+                    </div>
+                  {% endif %}
+                {% endif %}
+              </div>
+            </div>
+
+            <form class="actions" action="{% url 'disconnect_google' acc.pk %}" method="post"
+                  onsubmit="return confirm('Disconnect this Google account?');">
+              {% csrf_token %}
+              <button class="btn small" type="submit">Disconnect</button>
+            </form>
+          </li>
+          {% endwith %}
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p>No Google accounts linked yet.</p>
+    {% endif %}
+
+    <p style="margin-top:1rem">
+      <a class="btn" href="{% provider_login_url 'google' process='connect' %}">Connect another Google account</a>
+    </p>
+  </section>
+</body>
+</html>

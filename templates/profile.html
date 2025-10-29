@@ -1,0 +1,10 @@
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>Your Profile</title></head>
+<body>
+  <h1>Hello, {{ request.user.username }}!</h1>
+  <p>Email: {{ request.user.email }}</p>
+  <p><a href="{% url 'logout' %}">Log out</a></p>
+  <p><a href="{% url 'home' %}">Back to home</a></p>
+</body>
+</html>

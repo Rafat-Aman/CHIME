@@ -138,4 +138,5 @@ SOCIALACCOUNT_PROVIDERS = {
         "AUTH_PARAMS": {"access_type": "offline", "prompt": "consent"},
     }
 }
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
