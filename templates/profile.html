@@ -1,10 +1,21 @@
-<!doctype html>
-<html>
-<head><meta charset="utf-8"><title>Your Profile</title></head>
-<body>
-  <h1>Hello, {{ request.user.username }}!</h1>
-  <p>Email: {{ request.user.email }}</p>
-  <p><a href="{% url 'logout' %}">Log out</a></p>
-  <p><a href="{% url 'home' %}">Back to home</a></p>
-</body>
-</html>
+{% extends "base.html" %}
+
+{% block title %}Profile · MyProject{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <h2>Your Profile</h2>
+    <div class="page-actions">
+      <a class="btn-outline" href="{% url 'dashboard' %}">Dashboard</a>
+    </div>
+  </div>
+
+  <section class="card">
+    <dl class="details">
+      <div><dt>Username</dt><dd>{{ request.user.username }}</dd></div>
+      <div><dt>Email</dt><dd>{{ request.user.email|default:"—" }}</dd></div>
+      <div><dt>Joined</dt><dd>{{ request.user.date_joined|date:"M j, Y, P" }}</dd></div>
+      <div><dt>Last login</dt><dd>{{ request.user.last_login|date:"M j, Y, P" }}</dd></div>
+    </dl>
+  </section>
+{% endblock %}

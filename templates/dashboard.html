@@ -1,82 +1,90 @@
+{% extends "base.html" %}
 {% load socialaccount %}
-<!doctype html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Dashboard</title>
-  <style>
-    body { font-family: system-ui, Arial, sans-serif; max-width: 900px; margin: 2rem auto; }
-    header { display:flex; justify-content:space-between; align-items:center; margin-bottom:1rem; }
-    .card { border:1px solid #e5e7eb; border-radius:10px; padding:1rem; margin-bottom:1rem; }
-    .row { display:flex; align-items:center; gap:12px; }
-    .btn { padding:.5rem .9rem; border:1px solid #ddd; border-radius:8px; text-decoration:none; cursor:pointer; background:#fff; }
-    .btn:hover { background:#f7f7f7; }
-    .btn.small { padding:.35rem .7rem; font-size:.9rem; }
-    img.avatar { height:28px; width:28px; border-radius:50%; object-fit:cover; }
-    .dim { color:#6b7280; }
-    .danger { color:#b91c1c; }
-    .actions { display:flex; gap:8px; align-items:center; }
-    ul.accounts { list-style:none; padding:0; margin:0; display:flex; flex-direction:column; gap:12px; }
-    li.account { display:flex; justify-content:space-between; align-items:center; border:1px solid #e5e7eb; border-radius:10px; padding:.85rem 1rem; }
-  </style>
-</head>
-<body>
-  <header>
-    <h1>Your dashboard</h1>
-    <nav class="actions">
-      <a class="btn" href="{% url 'home' %}">Home</a>
-      <a class="btn" href="{% url 'account_logout' %}">Logout</a>
-    </nav>
-  </header>
 
-  {% if messages %}
-    <ul>
-      {% for m in messages %}<li>{{ m }}</li>{% endfor %}
-    </ul>
+{% block title %}Dashboard · MyProject{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <h2>Your Dashboard</h2>
+    <div class="page-actions">
+      <a class="btn-outline" href="{% url 'home' %}">Home</a>
+      <a class="btn-outline" href="{% url 'profile' %}">Profile</a>
+      <a class="btn btn-google" href="{% provider_login_url 'google' process='connect' %}">
+        <span class="g-icon"></span> Connect another Google account
+      </a>
+    </div>
+  </div>
+
+  {% if total %}
+  <!-- Aggregate donut (top-right corner). No CSS here; styled via site.css -->
+  <aside class="disk-widget" aria-label="Aggregate storage">
+    {% if total.limit_bytes %}
+      <div class="donut" data-pct="{{ total.pct_used|default:0 }}">
+        <div class="donut-center">
+          <div class="donut-fig">{{ total.avail_h }}</div>
+          <div class="donut-cap">free</div>
+        </div>
+      </div>
+      <div class="disk-meta">
+        <div><strong>{{ total.used_h }}</strong> used</div>
+        <div class="muted">of {{ total.limit_h }} total</div>
+      </div>
+    {% else %}
+      <div class="donut unlimited">
+        <div class="donut-center">
+          <div class="donut-fig">∞</div>
+          <div class="donut-cap">unlimited</div>
+        </div>
+      </div>
+      <div class="disk-meta">
+        <div><strong>{{ total.used_h }}</strong> used</div>
+        <div class="muted">total is unlimited</div>
+      </div>
+    {% endif %}
+  </aside>
   {% endif %}
 
   <section class="card">
-    <h2>Connected Google accounts</h2>
+    <div class="card-head">
+      <h3>Connected Google accounts</h3>
+    </div>
 
     {% if items %}
       <ul class="accounts">
         {% for item in items %}
           {% with acc=item.account data=item.account.extra_data q=item.quota err=item.error %}
           <li class="account">
-            <div class="row">
+            <div class="account-main">
               {% if data.picture %}<img class="avatar" src="{{ data.picture }}" alt="">{% endif %}
-              <div>
-                <div><strong>{{ data.name|default:acc.uid }}</strong></div>
-                <div class="dim">{{ data.email|default:"(no email)" }}</div>
+              <div class="meta">
+                <div class="name">{{ data.name|default:acc.uid }}</div>
+                <div class="sub">{{ data.email|default:"(no email)" }}</div>
 
                 {% if q %}
-                  <div class="dim">
-                    Drive: used {{ q.usage }} / {{ q.limit }}{% if q.remaining %} (remaining {{ q.remaining }}){% endif %}
-                  </div>
+                  <dl class="details" style="margin-top:8px">
+                    <dt>Drive used</dt><dd>{{ q.usage }}</dd>
+                    <dt>Plan limit</dt><dd>{{ q.limit }}</dd>
+                    {% if q.remaining %}<dt>Free left</dt><dd>{{ q.remaining }}</dd>{% endif %}
+                  </dl>
                 {% endif %}
 
                 {% if err %}
-                  <div class="danger">Drive quota error: {{ err }}</div>
-
-                  {# If the token lacks Drive scope, invite re-consent #}
-                  {% if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in err or "insufficientPermissions" in err or "Insufficient Permission" in err %}
-                    <div class="dim" style="margin-top:.35rem;">
-                      This account was connected before Drive access was requested. Re-grant access:
-                    </div>
-                    <div class="actions" style="margin-top:.35rem;">
-                      <a class="btn small" href="{% provider_login_url 'google' process='connect' %}">
-                        Grant Drive access
+                  <div class="error">
+                    Drive quota error: {{ err }}
+                    {% if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in err or "insufficientPermissions" in err or "Insufficient Permission" in err %}
+                      <div class="hint">This account was connected before Drive access was requested.</div>
+                      <a class="btn small btn-google" href="{% provider_login_url 'google' process='connect' %}">
+                        <span class="g-icon"></span> Grant Drive access
                       </a>
-                    </div>
-                  {% endif %}
+                    {% endif %}
+                  </div>
                 {% endif %}
               </div>
             </div>
 
-            <form class="actions" action="{% url 'disconnect_google' acc.pk %}" method="post"
-                  onsubmit="return confirm('Disconnect this Google account?');">
+            <form class="account-actions" action="{% url 'disconnect_google' acc.pk %}" method="post" onsubmit="return confirm('Disconnect this Google account?');">
               {% csrf_token %}
-              <button class="btn small" type="submit">Disconnect</button>
+              <button class="btn-outline small" type="submit">Disconnect</button>
             </form>
           </li>
           {% endwith %}
@@ -85,10 +93,17 @@
     {% else %}
       <p>No Google accounts linked yet.</p>
     {% endif %}
-
-    <p style="margin-top:1rem">
-      <a class="btn" href="{% provider_login_url 'google' process='connect' %}">Connect another Google account</a>
-    </p>
   </section>
-</body>
-</html>
+
+  <!-- Tiny script to set CSS var from data-pct without inline CSS -->
+  <script>
+    (function(){
+      var donut = document.querySelector('.donut[data-pct]');
+      if(!donut) return;
+      var pct = parseInt(donut.getAttribute('data-pct') || '0', 10);
+      if (isNaN(pct) || pct < 0) pct = 0;
+      if (pct > 100) pct = 100;
+      donut.style.setProperty('--p', pct);
+    })();
+  </script>
+{% endblock %}

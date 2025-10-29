@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% load i18n socialaccount %}
+
+{% block title %}Connected Accounts · MyProject{% endblock %}
+
+{% block content %}
+  <div class="page-head">
+    <h2>Connected Accounts</h2>
+    <div class="page-actions">
+      <a class="btn-outline" href="{% url 'dashboard' %}">Back to Dashboard</a>
+      <a class="btn" href="{% provider_login_url 'google' process='connect' %}">
+        Connect another Google account
+      </a>
+    </div>
+  </div>
+
+  {% if form.accounts %}
+    <form method="post" action="{% url 'socialaccount_connections' %}">
+      {% csrf_token %}
+      <section class="card">
+        <ul class="accounts">
+          {% for base_account in form.accounts %}
+            {% with acc=base_account.get_provider_account account=base_account.account %}
+            <li class="account">
+              <div class="account-main">
+                {% if acc.get_avatar_url %}
+                  <img class="avatar" src="{{ acc.get_avatar_url }}" alt="">
+                {% endif %}
+                <div class="meta">
+                  <div class="name">{{ acc|default:account.uid }}</div>
+                  <div class="sub">{{ account.provider|title }}</div>
+                </div>
+              </div>
+
+              <div class="account-actions">
+                <label class="sr-only">{{ base_account }} {% trans "Remove" %}</label>
+                {{ base_account.get_forms.check }}  <!-- hidden via CSS below -->
+                {{ base_account.get_forms.remove }}
+                <button class="btn-outline small" type="submit" name="action_remove">
+                  Remove
+                </button>
+              </div>
+            </li>
+            {% endwith %}
+          {% endfor %}
+        </ul>
+      </section>
+    </form>
+  {% else %}
+    <section class="card">
+      <p>You haven’t connected any third-party accounts yet.</p>
+    </section>
+  {% endif %}
+
+  <style>
+    /* hide the default radio/checkbox that allauth renders */
+    input[type="radio"], input[type="checkbox"]{ display:none; }
+    .sr-only{ position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+  </style>
+{% endblock %}

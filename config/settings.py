@@ -139,4 +139,5 @@ SOCIALACCOUNT_PROVIDERS = {
     }
 }
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SOCIALACCOUNT_ADAPTER = "core.adapters.SocialAccountAdapter"
 
