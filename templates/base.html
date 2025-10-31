@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>{% block title %}MyProject{% endblock %}</title>
+  <title>{% block title %}CHIME{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link href="{% static 'css/site.css' %}" rel="stylesheet" />
   {% block head %}{% endblock %}
@@ -11,7 +11,7 @@
 <body>
   <header class="site-header">
     <div class="container">
-      <a class="brand" href="{% url 'home' %}">MyProject</a>
+      <a class="brand" href="{% url 'home' %}">CHIME</a>
       <nav class="nav">
         <a class="nav-link{% if request.resolver_match.url_name == 'home' %} active{% endif %}" href="{% url 'home' %}">Home</a>
 
@@ -43,7 +43,7 @@
 
   <footer class="site-footer">
     <div class="container">
-      <small>© {{ now|date:"Y" }} MyProject</small>
+      <small>© {{ now|date:"Y" }} CHIME</small>
       <div class="footer-links">
         <a href="{% url 'home' %}">Home</a>
         {% if request.user.is_authenticated %}
