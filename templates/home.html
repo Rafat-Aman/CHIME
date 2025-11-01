@@ -8,7 +8,6 @@
     <h1>Welcome{% if request.user.is_authenticated %}, {{ request.user.username }}{% endif %}</h1>
     <p class="lead">
       Link multiple Google accounts and see Drive storage for each on your dashboard.
-      Tokens are saved, so you don’t need to reconnect after every login.
     </p>
 
     {% if request.user.is_authenticated %}
