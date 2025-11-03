@@ -1,0 +1,64 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Log in · CHIME</title>
+    <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+
+<body>
+    <div class="container">
+        <header class="site-header">
+            <div class="container">
+                <h1 class="brand">CHIME</h1>
+            </div>
+        </header>
+
+        <main class="hero" style="max-width:420px; margin:auto; margin-top:60px;">
+            <h2 class="hero-title" style="margin-bottom:16px;">Log in</h2>
+
+            {% if messages %}
+            <div class="messages">
+                <ul>
+                    {% for m in messages %}
+                    <li class="msg">{{ m }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if form.errors %}
+            <div class="msg error">Invalid username or password.</div>
+            {% endif %}
+
+            <form method="post" style="display:flex; flex-direction:column; gap:14px;">
+                {% csrf_token %}
+                {{ form.as_p }}
+                {% if next %}
+                <input type="hidden" name="next" value="{{ next }}">
+                {% endif %}
+                <button class="btn" type="submit">Log in</button>
+            </form>
+
+            <div class="note">
+                <a href="{% url 'account_reset_password' %}">Forgot your password?</a>
+                <p>New here? <a href="{% url 'account_signup' %}">Create an account</a></p>
+                <p><a href="{% url 'home' %}">Back to home</a></p>
+            </div>
+        </main>
+
+        <footer class="site-footer">
+            <div class="container">
+                <div class="footer-links">
+                    <a href="#">Privacy</a>
+                    <a href="#">Terms</a>
+                </div>
+                <div>&copy; 2025 CHIME</div>
+            </div>
+        </footer>
+    </div>
+</body>
+
+</html>

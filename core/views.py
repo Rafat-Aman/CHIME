@@ -172,7 +172,7 @@ def register(request):
         form = FormClass()
 
     # Use your existing template; adjust name if yours differs
-    return render(request, "register.html", {"form": form})
+    return render(request, "registration/register.html", {"form": form})
 
 
 @login_required
@@ -313,4 +313,4 @@ def dashboard(request):
         "pct_used": (int(round((total_used_b / total_limit_b) * 100)) if total_limit_b else None),
     }
 
-    return render(request, "dashboard.html", {"items": items, "total": total})
+    return render(request, "account/dashboard.html", {"items": items, "total": total})

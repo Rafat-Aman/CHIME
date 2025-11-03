@@ -12,13 +12,13 @@
 
     {% if request.user.is_authenticated %}
       <div class="actions">
-        <a class="btn" href="{% url 'dashboard' %}">Go to Dashboard</a>
+        <a class="btn" href="{% url 'account_dashboard' %}">Go to Dashboard</a>
         <a class="btn-outline" href="{% url 'profile' %}">View Profile</a>
       </div>
     {% else %}
       <div class="actions">
         <a class="btn" href="{% url 'account_login' %}">Login</a>
-        <a class="btn-outline" href="{% url 'register' %}">Create account</a>
+        <a class="btn-outline" href="{% url 'account_signup' %}">Create account</a>
         {% if has_google_app %}
           <a class="btn-google" href="{% provider_login_url 'google' %}">
             <span class="g-icon" aria-hidden="true"></span> Sign in with Google

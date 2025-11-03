@@ -1,0 +1,76 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <title>Sign up · CHIME</title>
+  <link rel="stylesheet" href="{% static 'css/site.css' %}">
+</head>
+
+<body>
+  <div class="container">
+    <header class="site-header">
+      <div class="container">
+        <h1 class="brand">CHIME</h1>
+      </div>
+    </header>
+
+    <main class="hero" style="max-width:420px; margin:auto; margin-top:60px;">
+      <h2 class="hero-title" style="margin-bottom:16px;">Create your account</h2>
+
+      {% if messages %}
+      <div class="messages">
+        <ul>
+          {% for m in messages %}
+          <li class="msg">{{ m }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+      {% endif %}
+
+      <form method="post" novalidate style="display:flex; flex-direction:column; gap:14px;">
+        {% csrf_token %}
+        {{ form.non_field_errors }}
+        <div>
+          <label>Username</label>
+          {{ form.username }}
+          {{ form.username.errors }}
+        </div>
+        <div>
+          <label>Email</label>
+          {{ form.email }}
+          {{ form.email.errors }}
+        </div>
+        <div>
+          <label>Password</label>
+          {{ form.password1 }}
+          {{ form.password1.errors }}
+        </div>
+        <div>
+          <label>Confirm password</label>
+          {{ form.password2 }}
+          {{ form.password2.errors }}
+        </div>
+        <button class="btn" type="submit">Sign up</button>
+      </form>
+
+      <div class="note">
+        <a href="{% url 'account_login' %}">Log in</a>
+        <p><a href="{% url 'home' %}">Back to home</a></p>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <div class="footer-links">
+          <a href="#">Privacy</a>
+          <a href="#">Terms</a>
+        </div>
+        <div>&copy; 2025 CHIME</div>
+      </div>
+    </footer>
+  </div>
+</body>
+
+</html>

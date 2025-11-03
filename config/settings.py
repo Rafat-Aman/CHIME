@@ -115,7 +115,7 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # === Redirects & auth URLs ===
-LOGIN_REDIRECT_URL = "dashboard"
+LOGIN_REDIRECT_URL = "account_dashboard"
 LOGOUT_REDIRECT_URL = "home"
 LOGIN_URL = "account_login"  # allauth login view
 
