@@ -1,0 +1,29 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Upload to Google Drive</title>
+    <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
+</head>
+<body>
+    <h1>Upload Large File to Google Drive</h1>
+
+    <input type="file" id="fileInput">
+    <input type="number" id="chunkSize" value="5" min="1"> MB
+    <button id="uploadBtn">Upload</button>
+
+    <div id="progress">
+        <div id="bar"></div>
+    </div>
+
+    <script src="{% static 'drive_integration/js/upload.js' %}"></script>
+    <script>
+        document.getElementById("uploadBtn").addEventListener("click", async () => {
+            const file = document.getElementById("fileInput").files[0];
+            const chunkSize = parseInt(document.getElementById("chunkSize").value);
+            await uploadFile(file, chunkSize, "{% url 'create_upload_session' %}");
+        });
+    </script>
+</body>
+</html>

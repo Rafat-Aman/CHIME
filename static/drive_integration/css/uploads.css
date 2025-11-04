@@ -1,0 +1,21 @@
+body {
+  font-family: sans-serif;
+  margin: 40px;
+  text-align: center;
+}
+
+#progress {
+  width: 60%;
+  height: 20px;
+  background: #eee;
+  margin: 20px auto;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+#bar {
+  width: 0;
+  height: 100%;
+  background: linear-gradient(to right, #4caf50, #81c784);
+  transition: width 0.3s ease;
+}

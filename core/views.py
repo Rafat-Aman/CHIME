@@ -1,5 +1,6 @@
 ﻿# core/views.py
-from __future__ import annotations
+import requests
+
 
 from django.conf import settings
 from django.contrib import messages
@@ -7,7 +8,10 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import render, redirect, get_object_or_404
-
+#chunking
+from django.http import JsonResponse
+from google.oauth2.credentials import Credentials
+from django.views.decorators.csrf import csrf_exempt
 # allauth
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
 
@@ -314,3 +318,39 @@ def dashboard(request):
     }
 
     return render(request, "dashboard.html", {"items": items, "total": total})
+
+
+#uploadschuning
+@csrf_exempt
+@login_required
+def create_upload_session(request):
+    user = request.user
+    creds = Credentials.from_authorized_user_info(user.google_credentials)
+
+    filename = request.POST.get("filename")
+    filesize = request.POST.get("filesize")
+    mime_type = request.POST.get("mime_type")
+
+    headers = {
+        "Authorization": f"Bearer {creds.token}",
+        "Content-Type": "application/json; charset=UTF-8",
+    }
+    data = {
+        "name": filename,
+        "mimeType": mime_type,
+    }
+    params = {
+        "uploadType": "resumable",
+    }
+
+    response = requests.post(
+        "https://www.googleapis.com/upload/drive/v3/files",
+        headers=headers,
+        params=params,
+        json=data
+    )
+
+    upload_url = response.headers.get("Location")
+    return JsonResponse({"uploadUrl": upload_url})
+def upload_view(request):
+    return render(request, 'drive_integration/uploads.html')
