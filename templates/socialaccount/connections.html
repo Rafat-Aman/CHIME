@@ -8,9 +8,11 @@
     <h2>Connected Accounts</h2>
     <div class="page-actions">
       <a class="btn-outline" href="{% url 'account_dashboard' %}">Back to Dashboard</a>
+      {% comment %}
       <a class="btn" href="{% provider_login_url 'google' process='connect' %}">
         Connect another Google account
       </a>
+      {% endcomment %}
     </div>
   </div>
 
