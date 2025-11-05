@@ -1,7 +1,8 @@
-# drive_integration/urls.py
 from django.urls import path
 from . import views
 
 urlpatterns = [
-    path('uploads/', views.uploads_view, name='uploads'),
+    path("create-upload-session/", views.create_upload_session, name="create_upload_session"),
+    path("proxy-chunk/", views.proxy_resumable_chunk, name="proxy_resumable_chunk"),  # +++
+    path("uploads/", views.uploads_view, name="uploads"),
 ]
