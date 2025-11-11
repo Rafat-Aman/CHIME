@@ -22,70 +22,67 @@ function updateProgress(percent) {
 }
 
 // ------------------------------
-// MAIN UPLOAD FUNCTION
+// Create upload session for specific account
 // ------------------------------
-async function uploadFile(file, chunkSizeMB, sessionUrlEndpoint) {
-  if (!file) {
-    alert("Select a file first.");
-    return;
-  }
-
-  // 1) CREATE UPLOAD SESSION (Django endpoint)
-  let res = await fetch(sessionUrlEndpoint, {
+async function createSessionForAccount(fileName, mimeType, accountId) {
+  const res = await fetch("{% url 'create_upload_session' %}".replace(/%7B%7D/,""), { // placeholder; will be replaced by server-side url tag in template
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "X-CSRFToken": getCSRFToken(),
     },
     body: JSON.stringify({
-      file_name: file.name,
-      mime_type: file.type || "application/octet-stream",
+      file_name: fileName,
+      mime_type: mimeType,
+      account_id: accountId
     }),
   });
 
   if (!res.ok) {
+    let text = await res.text();
     try {
-      const err = await res.json();
-      alert(`Failed to create upload session:\n${err.error || res.status}\n${err.details || ""}`);
+      const e = await res.json();
+      throw new Error(JSON.stringify(e));
     } catch (e) {
-      const text = await res.text();
-      alert(`Failed to create upload session: ${res.status}\n${text}`);
+      throw new Error(`Failed to create upload session: ${res.status}\n${text}`);
     }
-    return;
   }
 
-  const { upload_url: uploadUrl } = await res.json();
-  if (!uploadUrl) {
-    alert("Upload URL missing. Server error.");
-    return;
-  }
+  const data = await res.json();
+  return data.upload_url;
+}
 
-  // 2) CHUNK UPLOAD (via server proxy to avoid browser CORS)
-  const chunkSize = Math.max(1, Number(chunkSizeMB) || 5) * 1024 * 1024; // MB -> bytes
+// ------------------------------
+// Upload helper: chunk and POST to proxy which will PUT to Google
+// ------------------------------
+async function uploadChunkedToUrl(file, chunkSizeMB, uploadUrl, accountId) {
+  const chunkSize = Math.max(1, Number(chunkSizeMB) || 5) * 1024 * 1024;
   let uploaded = 0;
+
+  updateProgress(0);
 
   while (uploaded < file.size) {
     const end = Math.min(uploaded + chunkSize, file.size);
     const chunk = file.slice(uploaded, end);
 
-    // Send to our proxy; it will PUT to Google
     const qs = new URLSearchParams({
       upload_url: uploadUrl,
       start: String(uploaded),
       end: String(end - 1),
       total: String(file.size),
       mime: file.type || "application/octet-stream",
+      account_id: String(accountId),
     });
 
     const response = await fetch(`/drive_integration/proxy-chunk/?${qs.toString()}`, {
       method: "POST",
       headers: {
         "X-CSRFToken": getCSRFToken(),
-        // Content-Type will be auto-set for binary body; do not override
       },
       body: chunk,
     });
 
+    // Google responds with 308 (resume), or 200/201 when done
     if (response.status === 308) {
       uploaded = end;
       updateProgress((uploaded / file.size) * 100);
@@ -94,15 +91,61 @@ async function uploadFile(file, chunkSizeMB, sessionUrlEndpoint) {
 
     if (response.status === 200 || response.status === 201) {
       updateProgress(100);
-      alert("Upload finished!");
       return;
     }
 
     const bodyText = await response.text();
-    alert(`Upload failed: ${response.status}\n${bodyText}`);
-    return;
+    throw new Error(`Upload failed: ${response.status}\n${bodyText}`);
   }
 }
 
-// expose for inline handlers
-window.uploadFile = uploadFile;
+// ------------------------------
+// Top-level: create session and upload for a specific account
+// ------------------------------
+async function uploadToAccount(file, chunkSizeMB, accountId) {
+  if (!file) {
+    throw new Error("No file selected");
+  }
+
+  // Obtain a resumable upload URL for this specific account:
+  const uploadUrl = await (async () => {
+    // We cannot use Django template tags here because this file is static.
+    // We'll request the create-upload-session endpoint by path.
+    const res = await fetch("/drive_integration/create-upload-session/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": getCSRFToken(),
+      },
+      body: JSON.stringify({
+        file_name: file.name,
+        mime_type: file.type || "application/octet-stream",
+        account_id: accountId
+      }),
+    });
+
+    if (!res.ok) {
+      let text = await res.text();
+      try {
+        const e = await res.json();
+        throw new Error(JSON.stringify(e));
+      } catch (e) {
+        throw new Error(`Failed to create upload session: ${res.status}\n${text}`);
+      }
+    }
+
+    const data = await res.json();
+    return data.upload_url;
+  })();
+
+  if (!uploadUrl) {
+    throw new Error("No upload URL returned from server.");
+  }
+
+  // Now upload chunked via proxy endpoint (which will use account_id to select token)
+  await uploadChunkedToUrl(file, chunkSizeMB, uploadUrl, accountId);
+}
+
+// expose functions for inline usage in the template
+window.uploadToAccount = uploadToAccount;
+window.updateProgress = updateProgress;

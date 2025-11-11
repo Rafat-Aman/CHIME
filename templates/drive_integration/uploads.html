@@ -15,19 +15,61 @@
 
   <h1>Upload Large File to Google Drive</h1>
 
+  <div id="accounts">
+    <h3>Select target Drive accounts</h3>
+    {% if google_accounts %}
+      <form id="accountsForm">
+        {% for acc in google_accounts %}
+          <label style="display:block; margin-bottom:6px;">
+            <input type="checkbox" name="account" value="{{ acc.id }}" />
+            <!-- prefer email if present in extra_data, else show uid -->
+            {{ acc.extra_data.email|default:acc.uid }}
+          </label>
+        {% endfor %}
+      </form>
+    {% else %}
+      <p>No Google accounts connected. <a href="/accounts/google/login/">Connect Google</a></p>
+    {% endif %}
+  </div>
+
   <input type="file" id="fileInput">
   <input type="number" id="chunkSize" value="5" min="1"> MB
   <button id="uploadBtn">Upload</button>
 
+  <div id="currentAccount" style="margin-top:12px; font-weight:600;"></div>
   <div id="progress"><div id="bar"></div></div>
 
   <script src="{% static 'drive_integration/js/upload.js' %}"></script>
   <script>
     document.getElementById("uploadBtn").addEventListener("click", async () => {
       const file = document.getElementById("fileInput").files[0];
+      if (!file) { alert("Select a file first."); return; }
+
       const chunkSize = parseInt(document.getElementById("chunkSize").value || "5", 10);
-      const sessionUrl = "{% url 'create_upload_session' %}";
-      await uploadFile(file, chunkSize, sessionUrl);
+
+      // gather selected account ids
+      const checked = Array.from(document.querySelectorAll('input[name="account"]:checked')).map(i => i.value);
+      if (checked.length === 0) { alert("Select at least one target Google account."); return; }
+
+      // sequential upload: one after another
+      for (let i = 0; i < checked.length; i++) {
+        const accountId = checked[i];
+        // update visible current account (display email if possible)
+        const label = document.querySelector(`input[name="account"][value="${accountId}"]`).parentNode.innerText.trim();
+        document.getElementById("currentAccount").innerText = `Uploading to ${label} (${i+1}/${checked.length})`;
+        // call helper that requests a resumable session for the specific account and performs chunked upload
+        try {
+          await uploadToAccount(file, chunkSize, accountId);
+        } catch (err) {
+          alert("Upload failed for " + label + ":\n" + (err && err.message ? err.message : err));
+          // stop the sequence on error; comment out the next line if you want to continue on errors
+          return;
+        }
+      }
+
+      document.getElementById("currentAccount").innerText = "";
+      updateProgress(100);
+      alert("All uploads completed!");
     });
   </script>
 </body>
