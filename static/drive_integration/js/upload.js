@@ -38,19 +38,36 @@ function updateFileInfo() {
 
 function updateSliders() {
   const sliders = document.querySelectorAll(".chunk-slider");
+
   sliders.forEach(sl => {
     const accBlock = sl.closest(".account-block");
-    const remainingText = accBlock.dataset.remaining;
-    let availableMB = parseFloat(remainingText);
-    if (isNaN(availableMB)) availableMB = 0;
-    const maxChunks = Math.floor(availableMB / chunkSizeMB);
-    sl.max = maxChunks > totalChunks ? totalChunks : maxChunks;
+    let remainingText = accBlock.dataset.remaining.toString().trim();
+
+    // ---- Normalize "X GB" or "X MB" to MB ----
+    let availableMB = 0;
+    const match = remainingText.match(/([\d.]+)\s*(GB|MB)?/i);
+    if (match) {
+      const val = parseFloat(match[1]);
+      const unit = (match[2] || "MB").toUpperCase();
+      availableMB = unit === "GB" ? val * 1024 : val;
+    }
+
+    // ---- Compute max chunks ----
+    const maxChunks = Math.max(
+      0,
+      Math.floor(availableMB / chunkSizeMB)
+    );
+
+    sl.max = Math.min(maxChunks, totalChunks);
     accBlock.querySelector(".acc-max").textContent = sl.max;
-    sl.value = 0;
+    // Keep value within range
+    if (parseInt(sl.value) > sl.max) sl.value = sl.max;
     sl.dispatchEvent(new Event("input"));
   });
+
   validateTotals();
 }
+
 
 // ---- File + chunk size handlers ----
 document.getElementById("fileInput").addEventListener("change", e => {
