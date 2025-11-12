@@ -4,73 +4,42 @@
 <head>
   <meta charset="UTF-8">
   <title>Upload to Google Drive</title>
-  <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
-  <style>
-    #progress { width: 100%; height: 8px; background: #eee; margin-top: 12px; }
-    #bar { height: 100%; width: 0%; background: #4caf50; transition: width .2s; }
-  </style>
+<!-- <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}"> -->
+<link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
+
 </head>
 <body>
   {% csrf_token %}
+  <div class="upload-container">
+    <h1>Multi-Account Drive Upload</h1>
 
-  <h1>Upload Large File to Google Drive</h1>
-
-  <div id="accounts">
-    <h3>Select target Drive accounts</h3>
-    {% if google_accounts %}
-      <form id="accountsForm">
+    <div class="account-section">
+      <h3>Select Google Accounts</h3>
+      {% if google_accounts %}
         {% for acc in google_accounts %}
-          <label style="display:block; margin-bottom:6px;">
-            <input type="checkbox" name="account" value="{{ acc.id }}" />
-            <!-- prefer email if present in extra_data, else show uid -->
+          <label class="account-item">
+            <input type="checkbox" name="account" value="{{ acc.id }}">
             {{ acc.extra_data.email|default:acc.uid }}
           </label>
         {% endfor %}
-      </form>
-    {% else %}
-      <p>No Google accounts connected. <a href="/accounts/google/login/">Connect Google</a></p>
-    {% endif %}
+      {% else %}
+        <p>No Google accounts linked.</p>
+      {% endif %}
+    </div>
+
+    <div class="file-controls">
+      <input type="file" id="fileInput">
+      <input type="number" id="chunkSize" value="5" min="1"> MB
+      <button id="uploadBtn" class="upload-btn">Start Upload</button>
+    </div>
+
+    <div id="progressContainer"></div>
   </div>
 
-  <input type="file" id="fileInput">
-  <input type="number" id="chunkSize" value="5" min="1"> MB
-  <button id="uploadBtn">Upload</button>
-
-  <div id="currentAccount" style="margin-top:12px; font-weight:600;"></div>
-  <div id="progress"><div id="bar"></div></div>
-
-  <script src="{% static 'drive_integration/js/upload.js' %}"></script>
   <script>
-    document.getElementById("uploadBtn").addEventListener("click", async () => {
-      const file = document.getElementById("fileInput").files[0];
-      if (!file) { alert("Select a file first."); return; }
-
-      const chunkSize = parseInt(document.getElementById("chunkSize").value || "5", 10);
-
-      // gather selected account ids
-      const checked = Array.from(document.querySelectorAll('input[name="account"]:checked')).map(i => i.value);
-      if (checked.length === 0) { alert("Select at least one target Google account."); return; }
-
-      // sequential upload: one after another
-      for (let i = 0; i < checked.length; i++) {
-        const accountId = checked[i];
-        // update visible current account (display email if possible)
-        const label = document.querySelector(`input[name="account"][value="${accountId}"]`).parentNode.innerText.trim();
-        document.getElementById("currentAccount").innerText = `Uploading to ${label} (${i+1}/${checked.length})`;
-        // call helper that requests a resumable session for the specific account and performs chunked upload
-        try {
-          await uploadToAccount(file, chunkSize, accountId);
-        } catch (err) {
-          alert("Upload failed for " + label + ":\n" + (err && err.message ? err.message : err));
-          // stop the sequence on error; comment out the next line if you want to continue on errors
-          return;
-        }
-      }
-
-      document.getElementById("currentAccount").innerText = "";
-      updateProgress(100);
-      alert("All uploads completed!");
-    });
+    const CREATE_SESSION_URL = "{% url 'create_upload_session' %}";
+    const PROXY_CHUNK_URL = "{% url 'proxy_resumable_chunk' %}";
   </script>
+  <script src="{% static 'drive_integration/js/upload.js' %}"></script>
 </body>
 </html>

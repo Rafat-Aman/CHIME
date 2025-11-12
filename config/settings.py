@@ -29,7 +29,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "django.contrib.sites",
 
-    # Third‑party
+    # Third-party
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
@@ -76,7 +76,6 @@ WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = env("ASGI_APPLICATION", default=None) or None
 
 # === Database ===
-# Use DATABASE_URL if present, else fall back to sqlite3
 DATABASES = {
     "default": env.db(
         "DATABASE_URL",
@@ -102,7 +101,6 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-# WhiteNoise config
 STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_URL = "/media/"
@@ -124,20 +122,21 @@ ACCOUNT_USERNAME_REQUIRED = env.bool("ACCOUNT_USERNAME_REQUIRED", default=True)
 SOCIALACCOUNT_STORE_TOKENS = True
 SOCIALACCOUNT_ADAPTER = env("SOCIALACCOUNT_ADAPTER", default="core.adapters.SocialAccountAdapter")
 
-# Google OAuth — ensure expanded scopes and re-consent
+# === ✅ Google OAuth unified scopes ===
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": [
             "openid",
             "email",
             "profile",
+            # --- Read & write Drive access ---
             "https://www.googleapis.com/auth/drive.file",
-            # keep read‑only if you still use the About endpoint separately:
-            # "https://www.googleapis.com/auth/drive.metadata.readonly",
+            # --- Read-only metadata access (for storageQuota, etc.) ---
+            "https://www.googleapis.com/auth/drive.metadata.readonly",
         ],
         "AUTH_PARAMS": {
-            "access_type": "offline",
-            "prompt": "consent",
+            "access_type": "offline",  # ensures refresh tokens
+            "prompt": "consent",       # always ask for re-consent
             "include_granted_scopes": "false",
         },
     }
@@ -149,14 +148,12 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = env.bool("SESSION_EXPIRE_AT_BROWSER_CLOSE", de
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
 
-# === Logging (simple, extend in prod) ===
+# === Logging ===
 LOG_LEVEL = env("LOG_LEVEL", default="INFO")
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
-    "handlers": {
-        "console": {"class": "logging.StreamHandler"},
-    },
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
     "root": {"handlers": ["console"], "level": LOG_LEVEL},
     "loggers": {
         "django.request": {
@@ -167,7 +164,7 @@ LOGGING = {
     },
 }
 
-# === Security (tweak for production) ===
+# === Security ===
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if env.bool("USE_X_FORWARDED_PROTO", default=False) else None
 SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG and False)
 SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=not DEBUG)
@@ -177,12 +174,12 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", defa
 SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=not DEBUG)
 X_FRAME_OPTIONS = env("X_FRAME_OPTIONS", default="DENY")
 
-# === Custom user model (only set if provided) ===
+# === Custom user model ===
 _custom_user_model = env("AUTH_USER_MODEL", default="")
 if _custom_user_model:
-    AUTH_USER_MODEL = _custom_user_model  # keep default auth.User when not provided
+    AUTH_USER_MODEL = _custom_user_model
 
-# === REST Framework (optional; only if installed) ===
+# === REST Framework (optional) ===
 if "rest_framework" in INSTALLED_APPS:
     REST_FRAMEWORK = {
         "DEFAULT_AUTHENTICATION_CLASSES": [
@@ -193,7 +190,7 @@ if "rest_framework" in INSTALLED_APPS:
         ],
     }
 
-# === CORS (optional; only if installed) ===
+# === CORS (optional) ===
 if "corsheaders" in INSTALLED_APPS:
     MIDDLEWARE.insert(1, "corsheaders.middleware.CorsMiddleware")
     CORS_ALLOWED_ORIGINS = [o.strip() for o in env("CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()]
