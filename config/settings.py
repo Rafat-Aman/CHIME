@@ -198,3 +198,5 @@ if "corsheaders" in INSTALLED_APPS:
 
 # === Default primary key ===
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+# How many Google Drive accounts a user can link for distributed uploads
+MAX_DRIVE_ACCOUNTS = 5

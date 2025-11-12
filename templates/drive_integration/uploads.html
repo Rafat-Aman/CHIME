@@ -3,34 +3,54 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Upload to Google Drive</title>
-<!-- <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}"> -->
-<link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
-
+  <title>Distributed Drive Upload</title>
+  <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
 </head>
 <body>
   {% csrf_token %}
   <div class="upload-container">
-    <h1>Multi-Account Drive Upload</h1>
+    <h1>Distributed Upload</h1>
 
-    <div class="account-section">
-      <h3>Select Google Accounts</h3>
-      {% if google_accounts %}
-        {% for acc in google_accounts %}
-          <label class="account-item">
-            <input type="checkbox" name="account" value="{{ acc.id }}">
-            {{ acc.extra_data.email|default:acc.uid }}
-          </label>
-        {% endfor %}
-      {% else %}
-        <p>No Google accounts linked.</p>
-      {% endif %}
+    <!-- File & chunk settings -->
+    <div class="config-row">
+      <label for="fileInput">Select file:</label>
+      <input type="file" id="fileInput">
     </div>
 
-    <div class="file-controls">
-      <input type="file" id="fileInput">
-      <input type="number" id="chunkSize" value="5" min="1"> MB
-      <button id="uploadBtn" class="upload-btn">Start Upload</button>
+    <div class="config-row">
+      <label>Chunk Size (MB):</label>
+      <input type="number" id="chunkSize" min="100" max="1000" value="500">
+    </div>
+
+    <div id="file-info" class="hidden">
+      <p><strong>File size:</strong> <span id="file-size"></span></p>
+      <p><strong>Total chunks:</strong> <span id="total-chunks"></span></p>
+    </div>
+
+    <!-- Account list -->
+    <h3>Accounts (max {{ max_accounts }})</h3>
+    <div id="accounts">
+      {% for acc in google_accounts %}
+        <div class="account-block" 
+             data-id="{{ acc.id }}" 
+             data-remaining="{{ acc.remaining|default:'0' }}">
+          <div class="account-header">
+            <span class="acc-email">{{ acc.email }}</span>
+            <span class="acc-space">Remaining: {{ acc.remaining }} | Max: <span class="acc-max">0</span> chunks</span>
+          </div>
+          <div class="slider-wrapper">
+            <input type="range" class="chunk-slider" min="0" max="0" value="0">
+            <div class="tooltip hidden">0</div>
+          </div>
+          <span class="slider-value">0 chunks</span>
+        </div>
+      {% endfor %}
+    </div>
+
+    <div id="total-warning" class="warning hidden"></div>
+
+    <div class="summary">
+      <button id="uploadBtn" disabled>Start Upload</button>
     </div>
 
     <div id="progressContainer"></div>
@@ -39,6 +59,7 @@
   <script>
     const CREATE_SESSION_URL = "{% url 'create_upload_session' %}";
     const PROXY_CHUNK_URL = "{% url 'proxy_resumable_chunk' %}";
+    const SAVE_MANIFEST_URL = "{% url 'save_manifest' %}";
   </script>
   <script src="{% static 'drive_integration/js/upload.js' %}"></script>
 </body>
