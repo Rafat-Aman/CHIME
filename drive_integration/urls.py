@@ -6,4 +6,6 @@ urlpatterns = [
     path("proxy-chunk/", views.proxy_resumable_chunk, name="proxy_resumable_chunk"),
     path("uploads/", views.uploads_view, name="uploads"),
     path("save-manifest/", views.save_manifest, name="save_manifest"),
+    path("downloads/", views.downloads_view, name="downloads"),
+    path("download-chunk/", views.download_chunk, name="download_chunk"),
 ]

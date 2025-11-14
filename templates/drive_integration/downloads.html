@@ -1,0 +1,29 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Your Distributed Downloads</title>
+  <link rel="stylesheet" href="{% static 'drive_integration/css/downloads.css' %}">
+</head>
+<body>
+  {% csrf_token %}
+  <div class="downloads-container">
+    <header>
+      <h1>Your Uploaded Files</h1>
+      <p class="subtitle">Select a file to pull each chunk from Drive and stitch it back together in your browser.</p>
+    </header>
+
+    <div id="manifestList" class="manifest-list"></div>
+    <p id="emptyState" class="empty-state{% if manifests %} hidden{% endif %}">
+      No manifests found. Upload something first, then return here to download it.
+    </p>
+  </div>
+
+  {{ manifests|json_script:"manifest-data" }}
+  <script>
+    const DOWNLOAD_CHUNK_URL = "{% url 'download_chunk' %}";
+  </script>
+  <script src="{% static 'drive_integration/js/download.js' %}"></script>
+</body>
+</html>

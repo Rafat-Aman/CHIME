@@ -1,0 +1,101 @@
+.downloads-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 2.5rem 1.5rem;
+  font-family: Arial, sans-serif;
+  color: #1f1f1f;
+}
+
+.downloads-container h1 {
+  margin: 0 0 0.5rem;
+  font-size: 2rem;
+}
+
+.subtitle {
+  margin: 0 0 1.5rem;
+  color: #5a5a5a;
+}
+
+.manifest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.manifest-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+  background-color: #fff;
+}
+
+.manifest-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  font-size: 0.95rem;
+  color: #444;
+}
+
+.manifest-actions {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.manifest-actions button {
+  background-color: #2563eb;
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  padding: 0.6rem 1.25rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.manifest-actions button:disabled {
+  background-color: #9db9ff;
+  cursor: not-allowed;
+}
+
+.manifest-actions button:not(:disabled):hover {
+  background-color: #1e4fc7;
+}
+
+.progress-track {
+  position: relative;
+  height: 10px;
+  background-color: #e6ebff;
+  border-radius: 999px;
+  overflow: hidden;
+  flex: 1;
+}
+
+.progress-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 0;
+  background-color: #34d399;
+  transition: width 0.2s ease;
+}
+
+.status-text {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem 0;
+  color: #7b7b7b;
+  font-size: 1rem;
+}
+
+.hidden {
+  display: none;
+}

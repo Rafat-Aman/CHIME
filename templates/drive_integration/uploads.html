@@ -3,7 +3,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Distributed Drive Upload</title>
+  <title>Distributed Upload</title>
   <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
 </head>
 <body>
@@ -11,7 +11,6 @@
   <div class="upload-container">
     <h1>Distributed Upload</h1>
 
-    <!-- File & chunk settings -->
     <div class="config-row">
       <label for="fileInput">Select file:</label>
       <input type="file" id="fileInput">
@@ -19,7 +18,7 @@
 
     <div class="config-row">
       <label>Chunk Size (MB):</label>
-      <input type="number" id="chunkSize" min="100" max="1000" value="500">
+      <input type="number" id="chunkSize" min="1" max="10240" value="500">
     </div>
 
     <div id="file-info" class="hidden">
@@ -27,13 +26,10 @@
       <p><strong>Total chunks:</strong> <span id="total-chunks"></span></p>
     </div>
 
-    <!-- Account list -->
     <h3>Accounts (max {{ max_accounts }})</h3>
     <div id="accounts">
       {% for acc in google_accounts %}
-        <div class="account-block" 
-             data-id="{{ acc.id }}" 
-             data-remaining="{{ acc.remaining|default:'0' }}">
+        <div class="account-block" data-id="{{ acc.id }}" data-remaining="{{ acc.remaining }}">
           <div class="account-header">
             <span class="acc-email">{{ acc.email }}</span>
             <span class="acc-space">Remaining: {{ acc.remaining }} | Max: <span class="acc-max">0</span> chunks</span>
