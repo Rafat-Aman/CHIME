@@ -213,7 +213,7 @@ def save_manifest(request):
     except json.JSONDecodeError:
         return JsonResponse({"error": "Invalid JSON"}, status=400)
 
-    required = ["file_name", "total_size", "chunk_size", "total_chunks", "chunks"]
+    required = ["file_name", "total_size", "chunk_size", "total_chunks", "chunks", "file_checksum"]
     if not all(k in data for k in required):
         return JsonResponse({"error": "Missing manifest fields"}, status=400)
 
@@ -240,6 +240,7 @@ def save_manifest(request):
     manifest = DriveManifest.objects.create(
         user=request.user,
         file_name=data.get("file_name"),
+        file_checksum=data.get("file_checksum", ""),
         total_size=int(data.get("total_size", 0)),
         chunk_size=int(data.get("chunk_size", 0)),
         total_chunks=int(data.get("total_chunks", 0)),
@@ -259,6 +260,7 @@ def downloads_view(request):
         manifests.append({
             "id": manifest.id,
             "file_name": manifest.file_name,
+             "file_checksum": manifest.file_checksum or "",
             "mime_type": getattr(manifest, "mime_type", None),
             "total_size": manifest.total_size,
             "chunk_size": manifest.chunk_size,

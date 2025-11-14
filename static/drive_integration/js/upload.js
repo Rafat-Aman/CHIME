@@ -18,11 +18,83 @@ let fileSize = 0;
 let chunkSizeMB = 500;
 let chunkSizeBytes = 500 * 1024 * 1024;
 let totalChunks = 0;
+let fileChecksum = "";
+let fileChecksumPromise = null;
+let fileChecksumContext = 0;
+const fileChecksumEl = document.getElementById("file-checksum");
+
+function renderFileChecksumDisplay(message) {
+  if (!fileChecksumEl) return;
+  if (message) {
+    fileChecksumEl.textContent = message;
+    return;
+  }
+  if (fileChecksum) {
+    fileChecksumEl.textContent = fileChecksum;
+  } else if (fileChecksumPromise) {
+    fileChecksumEl.textContent = "Computing...";
+  } else {
+    fileChecksumEl.textContent = "N/A";
+  }
+}
+
+function startFileChecksum() {
+  if (!file) {
+    fileChecksum = "";
+    renderFileChecksumDisplay();
+    return null;
+  }
+  if (fileChecksumPromise) return fileChecksumPromise;
+  const context = fileChecksumContext;
+  const promise = checksum(file)
+    .then(hash => {
+      if (context !== fileChecksumContext) return hash;
+      fileChecksum = hash;
+      renderFileChecksumDisplay();
+      return hash;
+    })
+    .catch(err => {
+      console.error("File checksum failed", err);
+      if (context === fileChecksumContext) {
+        fileChecksum = "";
+        renderFileChecksumDisplay("Checksum failed");
+      }
+      return "";
+    })
+    .finally(() => {
+      if (fileChecksumContext === context && fileChecksumPromise === promise) {
+        fileChecksumPromise = null;
+        if (!fileChecksum) {
+          renderFileChecksumDisplay();
+        }
+      }
+    });
+  fileChecksumPromise = promise;
+  renderFileChecksumDisplay();
+  return promise;
+}
+
+async function ensureFileChecksum() {
+  if (fileChecksum) return fileChecksum;
+  if (!file) return "";
+  if (!fileChecksumPromise) {
+    startFileChecksum();
+  }
+  if (fileChecksumPromise) {
+    try {
+      await fileChecksumPromise;
+    } catch (err) {
+      console.error("Checksum promise failed", err);
+    }
+  }
+  return fileChecksum;
+}
 
 function updateFileInfo() {
   document.getElementById("file-info").classList.remove("hidden");
   document.getElementById("file-size").textContent = `${toMB(fileSize)} MB`;
   document.getElementById("total-chunks").textContent = totalChunks;
+  renderFileChecksumDisplay();
 }
 
 function parseRemainingMB(s) {
@@ -49,15 +121,24 @@ function updateSliders() {
   validateTotals();
 }
 
-document.getElementById("fileInput").addEventListener("change", e => {
+document.getElementById("fileInput").addEventListener("change", async e => {
   file = e.target.files[0];
-  if (!file) return;
+  fileChecksumContext += 1;
+  fileChecksumPromise = null;
+  fileChecksum = "";
+  renderFileChecksumDisplay();
+  if (!file) {
+    fileSize = 0;
+    totalChunks = 0;
+    return;
+  }
   fileSize = file.size;
   chunkSizeMB = parseInt(document.getElementById("chunkSize").value);
   chunkSizeBytes = chunkSizeMB * 1024 * 1024;
   totalChunks = Math.ceil(fileSize / chunkSizeBytes);
   updateFileInfo();
   updateSliders();
+  startFileChecksum();
 });
 
 document.getElementById("chunkSize").addEventListener("input", e => {
@@ -135,6 +216,11 @@ function updateBar(block, uploaded, total) {
 
 document.getElementById("uploadBtn").addEventListener("click", async () => {
   if (!file) return;
+  const overallChecksum = await ensureFileChecksum();
+  if (!overallChecksum) {
+    alert("Unable to compute the file checksum. Please reselect the file and try again.");
+    return;
+  }
   const chunkSize = chunkSizeMB * 1024 * 1024;
   const totalChunksLocal = Math.ceil(file.size / chunkSize);
   const manifest = [];
@@ -254,6 +340,7 @@ document.getElementById("uploadBtn").addEventListener("click", async () => {
       total_size: file.size,
       chunk_size: chunkSize,
       total_chunks: totalChunksLocal,
+      file_checksum: overallChecksum,
       chunks: manifest
     })
   });

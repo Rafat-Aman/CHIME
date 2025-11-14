@@ -9,6 +9,7 @@ class DriveManifest(models.Model):
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="drive_manifests")
     file_name = models.CharField(max_length=255)
+    file_checksum = models.CharField(max_length=128, blank=True, default="", help_text="SHA-256 hash of the full file")
     total_size = models.BigIntegerField()
     chunk_size = models.BigIntegerField()
     total_chunks = models.IntegerField()

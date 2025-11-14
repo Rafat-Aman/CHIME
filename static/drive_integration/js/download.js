@@ -24,6 +24,12 @@ const formatDate = iso => {
   return date.toLocaleString();
 };
 
+async function hashBlob(blob) {
+  const buffer = await blob.arrayBuffer();
+  const digest = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
 let manifestListEl = null;
 let emptyStateEl = null;
 
@@ -61,6 +67,10 @@ function renderManifestCard(manifest) {
   const created = document.createElement("div");
   created.textContent = `Uploaded: ${formatDate(manifest.created_at)}`;
   meta.appendChild(created);
+
+  const checksumMeta = document.createElement("div");
+  checksumMeta.textContent = `File hash: ${manifest.file_checksum || "N/A"}`;
+  meta.appendChild(checksumMeta);
 
   card.appendChild(meta);
 
@@ -193,6 +203,36 @@ async function downloadManifest(manifest, ui) {
     ui.status.textContent = "Merging chunks...";
     const mimeType = manifest.mime_type || "application/octet-stream";
     const blob = new Blob(blobParts, { type: mimeType });
+
+    const expectedFileHash = manifest.file_checksum || "";
+    if (expectedFileHash) {
+      ui.status.textContent = "Verifying file checksum...";
+      let computedHash = "";
+      try {
+        computedHash = await hashBlob(blob);
+      } catch (error) {
+        console.error("Final checksum failed", error);
+        const force = window.confirm("Unable to verify the merged file checksum. Download anyway?");
+        if (!force) {
+          ui.status.textContent = "Download cancelled.";
+          return;
+        }
+        ui.status.textContent = "Integrity check skipped. Preparing download...";
+      }
+
+      if (computedHash && computedHash !== expectedFileHash) {
+        ui.status.textContent = "Checksum mismatch detected.";
+        const force = window.confirm("File integrity check failed. Force the download anyway?");
+        if (!force) {
+          ui.status.textContent = "Download cancelled due to checksum mismatch.";
+          return;
+        }
+        ui.status.textContent = "Forcing download despite checksum mismatch.";
+      } else if (computedHash && computedHash === expectedFileHash) {
+        ui.status.textContent = "Integrity verified. Preparing download...";
+      }
+    }
+
     const url = window.URL.createObjectURL(blob);
 
     const link = document.createElement("a");
