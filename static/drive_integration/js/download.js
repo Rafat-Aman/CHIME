@@ -24,6 +24,21 @@ const formatDate = iso => {
   return date.toLocaleString();
 };
 
+let manifestListEl = null;
+let emptyStateEl = null;
+
+function handleEmptyState() {
+  if (!manifestListEl || !emptyStateEl) return;
+  const hasCards = manifestListEl.querySelector(".manifest-card");
+  if (hasCards) {
+    manifestListEl.classList.remove("hidden");
+    emptyStateEl.classList.add("hidden");
+  } else {
+    manifestListEl.classList.add("hidden");
+    emptyStateEl.classList.remove("hidden");
+  }
+}
+
 function renderManifestCard(manifest) {
   const card = document.createElement("div");
   card.className = "manifest-card";
@@ -52,10 +67,16 @@ function renderManifestCard(manifest) {
   const actions = document.createElement("div");
   actions.className = "manifest-actions";
 
-  const button = document.createElement("button");
-  button.type = "button";
-  button.textContent = "Download";
-  actions.appendChild(button);
+  const downloadBtn = document.createElement("button");
+  downloadBtn.type = "button";
+  downloadBtn.textContent = "Download";
+  actions.appendChild(downloadBtn);
+
+  const deleteBtn = document.createElement("button");
+  deleteBtn.type = "button";
+  deleteBtn.textContent = "Delete";
+  deleteBtn.classList.add("delete");
+  actions.appendChild(deleteBtn);
 
   const progressTrack = document.createElement("div");
   progressTrack.className = "progress-track";
@@ -70,8 +91,16 @@ function renderManifestCard(manifest) {
   status.textContent = "Idle";
   actions.appendChild(status);
 
-  button.addEventListener("click", () => {
-    downloadManifest(manifest, { button, progressFill, status });
+  downloadBtn.addEventListener("click", () => {
+    downloadManifest(manifest, { button: downloadBtn, progressFill, status });
+  });
+
+  deleteBtn.addEventListener("click", () => {
+    deleteManifest(manifest, {
+      card,
+      status,
+      buttons: [downloadBtn, deleteBtn],
+    });
   });
 
   card.appendChild(actions);
@@ -145,20 +174,58 @@ async function downloadManifest(manifest, ui) {
   }
 }
 
+async function deleteManifest(manifest, ui) {
+  const confirmed = window.confirm(`Delete "${manifest.file_name}" and all Drive chunks?`);
+  if (!confirmed) return;
+
+  ui.buttons.forEach(btn => {
+    // eslint-disable-next-line no-param-reassign
+    btn.disabled = true;
+  });
+  ui.status.textContent = "Deleting...";
+
+  try {
+    const res = await fetch(DELETE_MANIFEST_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": csrf(),
+      },
+      body: JSON.stringify({ manifest_id: manifest.id }),
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text();
+      throw new Error(errTxt || "Delete failed");
+    }
+
+    ui.status.textContent = "Deleted.";
+    ui.card.remove();
+    handleEmptyState();
+  } catch (error) {
+    console.error(error);
+    ui.status.textContent = `Delete failed: ${error.message}`;
+    ui.buttons.forEach(btn => {
+      // eslint-disable-next-line no-param-reassign
+      btn.disabled = false;
+    });
+  }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
   const script = document.getElementById("manifest-data");
   const manifests = script ? JSON.parse(script.textContent) : [];
-  const listEl = document.getElementById("manifestList");
-  const emptyState = document.getElementById("emptyState");
+  manifestListEl = document.getElementById("manifestList");
+  emptyStateEl = document.getElementById("emptyState");
 
   if (!manifests.length) {
-    listEl.classList.add("hidden");
-    emptyState.classList.remove("hidden");
+    handleEmptyState();
     return;
   }
 
-  emptyState.classList.add("hidden");
+  manifestListEl.classList.remove("hidden");
+  emptyStateEl.classList.add("hidden");
   manifests.forEach(manifest => {
-    listEl.appendChild(renderManifestCard(manifest));
+    manifestListEl.appendChild(renderManifestCard(manifest));
   });
 });

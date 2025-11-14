@@ -8,4 +8,5 @@ urlpatterns = [
     path("save-manifest/", views.save_manifest, name="save_manifest"),
     path("downloads/", views.downloads_view, name="downloads"),
     path("download-chunk/", views.download_chunk, name="download_chunk"),
+    path("delete-manifest/", views.delete_manifest, name="delete_manifest"),
 ]

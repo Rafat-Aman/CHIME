@@ -7,6 +7,7 @@ from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST
 from allauth.socialaccount.models import SocialAccount, SocialToken
 
 from .models import DriveManifest
@@ -275,3 +276,66 @@ def download_chunk(request):
     response = HttpResponse(resp.content, content_type=content_type)
     response["Content-Length"] = str(len(resp.content))
     return response
+
+
+# --------------------------------------------------------------------
+# API: Delete a manifest and all Drive chunks
+# --------------------------------------------------------------------
+@login_required
+@require_POST
+def delete_manifest(request):
+    try:
+        payload = json.loads(request.body or "{}")
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    manifest_id = payload.get("manifest_id")
+    if not manifest_id:
+        return JsonResponse({"error": "manifest_id is required"}, status=400)
+
+    manifest = get_object_or_404(DriveManifest, id=manifest_id, user=request.user)
+    chunks = manifest.manifest_data or []
+    token_cache = {}
+
+    def token_for(account_id):
+        if account_id in token_cache:
+            return token_cache[account_id], None
+        token, err = _get_google_token_for(request, account_id)
+        if err:
+            return None, err
+        token_cache[account_id] = token
+        return token, None
+
+    errors = []
+    for chunk in chunks:
+        drive_file_id = chunk.get("drive_file_id")
+        account_id = chunk.get("account_id")
+        if not drive_file_id or account_id is None:
+            continue
+
+        token, err = token_for(account_id)
+        if err:
+            return err
+
+        url = f"https://www.googleapis.com/drive/v3/files/{drive_file_id}"
+        headers = {"Authorization": f"Bearer {token}"}
+        try:
+            resp = requests.delete(url, headers=headers, timeout=60)
+        except Exception as e:
+            errors.append({"chunk": chunk.get("index"), "error": str(e)})
+            continue
+
+        if resp.status_code in (200, 204, 404):
+            continue
+
+        errors.append({
+            "chunk": chunk.get("index"),
+            "status": resp.status_code,
+            "details": resp.text[:200],
+        })
+
+    if errors:
+        return JsonResponse({"error": "Failed to delete some chunks", "details": errors}, status=502)
+
+    manifest.delete()
+    return JsonResponse({"message": "Manifest and chunks deleted"})

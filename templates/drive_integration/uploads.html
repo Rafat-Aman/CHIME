@@ -1,15 +1,22 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Distributed Upload</title>
+{% block title %}Distributed Upload{% endblock %}
+{% block head %}
+  {{ block.super }}
   <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
-</head>
-<body>
+{% endblock %}
+{% block content %}
   {% csrf_token %}
   <div class="upload-container">
-    <h1>Distributed Upload</h1>
+    <div class="page-head">
+      <div>
+        <h1>Distributed Upload</h1>
+        <p class="hint">Split a large file, send chunks to Google Drive accounts, and save the manifest for easy downloads.</p>
+      </div>
+      <div class="page-actions">
+        <a class="btn-outline small" href="{% url 'downloads' %}">Go to Downloads</a>
+      </div>
+    </div>
 
     <div class="config-row">
       <label for="fileInput">Select file:</label>
@@ -40,6 +47,8 @@
           </div>
           <span class="slider-value">0 chunks</span>
         </div>
+      {% empty %}
+        <p class="hint">No Google accounts linked yet.</p>
       {% endfor %}
     </div>
 
@@ -58,5 +67,4 @@
     const SAVE_MANIFEST_URL = "{% url 'save_manifest' %}";
   </script>
   <script src="{% static 'drive_integration/js/upload.js' %}"></script>
-</body>
-</html>
+{% endblock %}

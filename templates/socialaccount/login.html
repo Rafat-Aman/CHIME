@@ -1,0 +1,52 @@
+{% extends "socialaccount/base_entrance.html" %}
+{% load i18n %}
+{% load allauth %}
+{% block head_title %}{% trans "Redirecting..." %}{% endblock head_title %}
+{% block content %}
+    <div class="auto-redirect-message">
+        {% if process == "connect" %}
+            <h1>{% blocktrans with provider.name as provider %}Connecting {{ provider }}{% endblocktrans %}</h1>
+            <p>{% trans "Hold on while we jump straight to the Google authorization screen." %}</p>
+        {% else %}
+            <h1>{% blocktrans with provider.name as provider %}Signing in via {{ provider }}{% endblocktrans %}</h1>
+            <p>{% trans "We are taking you directly to Google to finish signing in." %}</p>
+        {% endif %}
+        <p class="hint">{% trans "If nothing happens after a few seconds, click Continue below." %}</p>
+    </div>
+
+    {% element form method="post" id="auto-provider-form" no_visible_fields=True %}
+        {% slot actions %}
+            {% csrf_token %}
+            {% element button type="submit" id="auto-provider-button" %}
+                {% trans "Continue" %}
+            {% endelement %}
+        {% endslot %}
+    {% endelement %}
+
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const btn = document.getElementById("auto-provider-button");
+            if (btn) {
+                btn.style.display = "none";
+                btn.click();
+            }
+        });
+    </script>
+
+    <style>
+        .auto-redirect-message {
+            text-align: center;
+            padding: 2rem 1rem;
+        }
+        .auto-redirect-message h1 {
+            margin-bottom: 0.5rem;
+        }
+        .auto-redirect-message p {
+            margin: 0.25rem 0;
+        }
+        .auto-redirect-message .hint {
+            margin-top: 1rem;
+            color: #666;
+        }
+    </style>
+{% endblock content %}

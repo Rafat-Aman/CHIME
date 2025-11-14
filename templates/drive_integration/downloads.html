@@ -1,18 +1,22 @@
+{% extends "base.html" %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Your Distributed Downloads</title>
+{% block title %}Distributed Downloads{% endblock %}
+{% block head %}
+  {{ block.super }}
   <link rel="stylesheet" href="{% static 'drive_integration/css/downloads.css' %}">
-</head>
-<body>
+{% endblock %}
+{% block content %}
   {% csrf_token %}
   <div class="downloads-container">
-    <header>
-      <h1>Your Uploaded Files</h1>
-      <p class="subtitle">Select a file to pull each chunk from Drive and stitch it back together in your browser.</p>
-    </header>
+    <div class="page-head">
+      <div>
+        <h1>Your Uploaded Files</h1>
+        <p class="subtitle">Select a file to pull each chunk from Drive and stitch it back together in your browser.</p>
+      </div>
+      <div class="page-actions">
+        <a class="btn-outline small" href="{% url 'uploads' %}">Back to Uploads</a>
+      </div>
+    </div>
 
     <div id="manifestList" class="manifest-list"></div>
     <p id="emptyState" class="empty-state{% if manifests %} hidden{% endif %}">
@@ -23,7 +27,7 @@
   {{ manifests|json_script:"manifest-data" }}
   <script>
     const DOWNLOAD_CHUNK_URL = "{% url 'download_chunk' %}";
+    const DELETE_MANIFEST_URL = "{% url 'delete_manifest' %}";
   </script>
   <script src="{% static 'drive_integration/js/download.js' %}"></script>
-</body>
-</html>
+{% endblock %}
