@@ -33,6 +33,8 @@ async function hashBlob(blob) {
 let manifestListEl = null;
 let emptyStateEl = null;
 let downloadSelectedBtn = null;
+let selectAllBtn = null;
+let clearSelectedBtn = null;
 const manifestControllers = new Map();
 const manifestDataMap = new Map();
 const selectedManifests = new Set();
@@ -407,6 +409,27 @@ document.addEventListener("DOMContentLoaded", () => {
   manifestListEl = document.getElementById("manifestList");
   emptyStateEl = document.getElementById("emptyState");
   downloadSelectedBtn = document.getElementById("downloadSelected");
+
+  selectAllBtn = document.getElementById("selectAllManifests");
+  clearSelectedBtn = document.getElementById("clearSelectedManifests");
+
+  selectAllBtn?.addEventListener("click", () => {
+    manifestControllers.forEach((ctrl, id) => {
+      if (ctrl.selectBox) {
+        ctrl.selectBox.checked = true;
+        selectedManifests.add(id);
+      }
+    });
+    updateBulkDownloadState();
+  });
+
+  clearSelectedBtn?.addEventListener("click", () => {
+    manifestControllers.forEach(ctrl => {
+      if (ctrl.selectBox) ctrl.selectBox.checked = false;
+    });
+    selectedManifests.clear();
+    updateBulkDownloadState();
+  });
 
   downloadSelectedBtn?.addEventListener("click", async () => {
     if (!selectedManifests.size) return;
