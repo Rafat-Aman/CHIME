@@ -22,6 +22,38 @@
   gap: 1rem;
 }
 
+.status-banner {
+  margin-bottom: 1rem;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #cbd5f5;
+  background: #eef2ff;
+  font-size: 0.95rem;
+  color: #1f2a3d;
+}
+
+.status-banner.active {
+  border-color: #fbbf24;
+  background: #fff7e6;
+  color: #92400e;
+}
+
+.status-banner.success {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.status-banner.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.status-banner.hidden {
+  display: none;
+}
+
 .manifest-card {
   border: 1px solid #e0e0e0;
   border-radius: 12px;
@@ -91,6 +123,46 @@
 
 .manifest-actions button.health:not(:disabled):hover {
   background-color: #115e57;
+}
+
+.page-actions .delete {
+  border-color: #dc2626;
+  color: #dc2626;
+}
+
+.page-actions .delete:disabled {
+  border-color: #f5a5a5;
+  color: #f5a5a5;
+}
+
+.download-filters {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.download-filters label {
+  font-size: 0.9rem;
+  color: #444;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.download-filters select {
+  border-radius: 8px;
+  border: 1px solid #d0d0d0;
+  padding: 0.3rem 0.6rem;
+  font-size: 0.9rem;
+}
+
+.manifest-group {
+  font-weight: 600;
+  color: #1f2937;
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
 }
 
 .progress-track {

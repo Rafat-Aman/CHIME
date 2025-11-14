@@ -7,65 +7,76 @@
 {% endblock %}
 {% block content %}
   {% csrf_token %}
-  <div class="upload-container">
-    <div class="page-head">
-      <div>
-        <h1>Distributed Upload</h1>
-        <p class="hint">Split a large file, send chunks to Google Drive accounts, and save the manifest for easy downloads.</p>
-      </div>
-      <div class="page-actions">
-        <a class="btn-outline small" href="{% url 'downloads' %}">Go to Downloads</a>
-      </div>
-    </div>
-
-    <div class="config-row">
-      <label for="fileInput">Select files:</label>
-      <input type="file" id="fileInput" multiple>
-    </div>
-
-    <div id="selected-files-wrapper" class="selected-files hidden">
-      <h4>Files queued</h4>
-      <ul id="selectedFilesList"></ul>
-      <p class="hint">Select a file in this list to adjust how its chunks are distributed across your accounts.</p>
-    </div>
-
-    <div class="config-row">
-      <label>Chunk Size (MB):</label>
-      <input type="number" id="chunkSize" min="1" max="10240" value="500">
-    </div>
-
-    <div id="file-info" class="hidden">
-      <p><strong>File size:</strong> <span id="file-size"></span></p>
-      <p><strong>Total chunks:</strong> <span id="total-chunks"></span></p>
-      <p><strong>File checksum:</strong> <span id="file-checksum">N/A</span></p>
-    </div>
-
-    <h3>Accounts (max {{ max_accounts }})</h3>
-    <div id="accounts">
-      {% for acc in google_accounts %}
-        <div class="account-block" data-id="{{ acc.id }}" data-remaining="{{ acc.remaining }}">
-          <div class="account-header">
-            <span class="acc-email">{{ acc.email }}</span>
-            <span class="acc-space">Remaining: {{ acc.remaining }} | Max: <span class="acc-max">0</span> chunks</span>
-          </div>
-          <div class="slider-wrapper">
-            <input type="range" class="chunk-slider" min="0" max="0" value="0">
-            <div class="tooltip hidden">0</div>
-          </div>
-          <span class="slider-value">0 chunks</span>
+  <div class="upload-layout">
+    <div class="upload-panel">
+      <div class="page-head">
+        <div>
+          <h1>Distributed Upload</h1>
+          <p class="hint">Split a large file, send chunks to Google Drive accounts, and save the manifest for easy downloads.</p>
         </div>
-      {% empty %}
-        <p class="hint">No Google accounts linked yet.</p>
-      {% endfor %}
+        <div class="page-actions">
+          <a class="btn-outline small" href="{% url 'downloads' %}">Go to Downloads</a>
+        </div>
+      </div>
+
+      <div id="fileDropZone" class="drop-zone">
+        <input type="file" id="fileInput" multiple hidden>
+        <p><strong>Drag & drop files here</strong> or <span class="browse-link" id="fileBrowseTrigger">browse</span></p>
+        <small>Supports multiple selections. Add more files anytime without losing your queue.</small>
+      </div>
+
+      <div class="config-row">
+        <label>Chunk Size (MB):</label>
+        <input type="number" id="chunkSize" min="1" max="10240" value="500">
+      </div>
+
+      <div id="selected-files-wrapper" class="selected-files hidden">
+        <h4>Files queued</h4>
+        <ul id="selectedFilesList"></ul>
+        <p class="hint">Select a file to preview its info and adjust distribution sliders.</p>
+      </div>
+
+      <div id="file-info" class="hidden">
+        <p><strong>File size:</strong> <span id="file-size"></span></p>
+        <p><strong>Total chunks:</strong> <span id="total-chunks"></span></p>
+        <p><strong>File checksum:</strong> <span id="file-checksum">N/A</span></p>
+      </div>
+
+      <h3>Accounts (max {{ max_accounts }})</h3>
+      <div id="accounts">
+        {% for acc in google_accounts %}
+          <div class="account-block" data-id="{{ acc.id }}" data-remaining="{{ acc.remaining }}">
+            <div class="account-header">
+              <span class="acc-email">{{ acc.email }}</span>
+              <span class="acc-space">Remaining: {{ acc.remaining }} | Max: <span class="acc-max">0</span> chunks</span>
+            </div>
+            <div class="slider-wrapper">
+              <input type="range" class="chunk-slider" min="0" max="0" value="0">
+              <div class="tooltip hidden">0</div>
+            </div>
+            <span class="slider-value">0 chunks</span>
+          </div>
+        {% empty %}
+          <p class="hint">No Google accounts linked yet.</p>
+        {% endfor %}
+      </div>
+
+      <div id="total-warning" class="warning hidden"></div>
+
+      <div class="summary">
+        <button id="uploadBtn" disabled>Start Upload</button>
+      </div>
+
+      <div id="uploadStatus" class="status-banner idle hidden">
+        <strong>Status:</strong> <span id="uploadStatusText">Idle</span>
+      </div>
     </div>
 
-    <div id="total-warning" class="warning hidden"></div>
-
-    <div class="summary">
-      <button id="uploadBtn" disabled>Start Upload</button>
+    <div class="progress-panel">
+      <h2>Upload Progress</h2>
+      <p class="hint">Your current uploads will appear here.</p>
+      <div id="progressContainer"></div>
     </div>
-
-    <div id="progressContainer"></div>
   </div>
 
   <script>

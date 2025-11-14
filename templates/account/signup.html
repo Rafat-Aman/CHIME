@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load socialaccount %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+  <section class="hero">
+    <h1>Redirecting to Google…</h1>
+    <p class="lead">Sign-ups happen through Google. We’re taking you there automatically.</p>
+    <div class="actions">
+      <a class="btn-google" id="fallback-google-signup" href="{% provider_login_url 'google' process='login' %}">
+        <span class="g-icon" aria-hidden="true"></span>
+        Continue with Google
+      </a>
+    </div>
+    <p class="hint">If you’re not redirected, use the button above.</p>
+  </section>
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      const fallback = document.getElementById("fallback-google-signup");
+      if (fallback) {
+        window.location.href = fallback.href;
+      }
+    });
+  </script>
+{% endblock %}

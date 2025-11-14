@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% load socialaccount %}
+{% block title %}Sign in{% endblock %}
+{% block content %}
+  <section class="hero">
+    <h1>Sign-in was cancelled</h1>
+    <p class="lead">We’ll take you back to Google so you can finish signing in.</p>
+    <div class="actions">
+      <a class="btn-google" id="fallback-google-resume" href="{% provider_login_url 'google' process='login' %}">
+        <span class="g-icon" aria-hidden="true"></span>
+        Resume with Google
+      </a>
+    </div>
+    <p class="hint">If nothing happens, click the button above.</p>
+  </section>
+  <script>
+    window.addEventListener("DOMContentLoaded", function () {
+      const fallback = document.getElementById("fallback-google-resume");
+      if (fallback) {
+        window.location.href = fallback.href;
+      }
+    });
+  </script>
+{% endblock %}

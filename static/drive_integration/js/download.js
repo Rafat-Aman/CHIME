@@ -30,18 +30,99 @@ async function hashBlob(blob) {
   return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
 }
 
-let manifestListEl = null;
-let emptyStateEl = null;
-let downloadSelectedBtn = null;
-let selectAllBtn = null;
-let clearSelectedBtn = null;
 const manifestControllers = new Map();
 const manifestDataMap = new Map();
 const selectedManifests = new Set();
+let manifestData = [];
 
-function updateBulkDownloadState() {
-  if (!downloadSelectedBtn) return;
-  downloadSelectedBtn.disabled = selectedManifests.size === 0;
+let manifestListEl = null;
+let emptyStateEl = null;
+let downloadSelectedBtn = null;
+let deleteSelectedBtn = null;
+let healthSelectedBtn = null;
+let selectAllBtn = null;
+let clearSelectedBtn = null;
+let sortSelect = null;
+let groupSelect = null;
+const downloadStatusBanner = document.getElementById("downloadStatus");
+const downloadStatusText = document.getElementById("downloadStatusText");
+let downloadsActive = 0;
+let downloadsHadErrors = false;
+
+let currentSort = "newest";
+let currentGroup = "none";
+
+function setDownloadStatus(state, message) {
+  if (!downloadStatusBanner || !downloadStatusText) return;
+  downloadStatusBanner.classList.remove("hidden", "active", "success", "error");
+  if (state === "active") {
+    downloadStatusBanner.classList.add("active");
+  } else if (state === "success") {
+    downloadStatusBanner.classList.add("success");
+  } else if (state === "error") {
+    downloadStatusBanner.classList.add("error");
+  }
+  const fallback = {
+    idle: "Idle",
+    active: "Downloading...",
+    success: "All downloads complete.",
+    error: "Downloads finished with issues.",
+  };
+  downloadStatusText.textContent = message || fallback[state] || "Status";
+  downloadStatusBanner.classList.remove("hidden");
+}
+
+function beginDownloadStatus() {
+  downloadsActive += 1;
+  setDownloadStatus("active", "Downloading...");
+}
+
+function endDownloadStatus(success) {
+  downloadsActive = Math.max(0, downloadsActive - 1);
+  if (!success) downloadsHadErrors = true;
+  if (downloadsActive === 0) {
+    setDownloadStatus(
+      downloadsHadErrors ? "error" : "success",
+      downloadsHadErrors ? "Some downloads failed." : "All downloads complete."
+    );
+    downloadsHadErrors = false;
+  } else {
+    setDownloadStatus("active", "Downloading...");
+  }
+}
+
+setDownloadStatus("idle", "Idle");
+
+window.addEventListener("beforeunload", event => {
+  if (downloadsActive > 0) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
+
+const SORTERS = {
+  newest: (a, b) => new Date(b.created_at) - new Date(a.created_at),
+  oldest: (a, b) => new Date(a.created_at) - new Date(b.created_at),
+  name_asc: (a, b) => a.file_name.localeCompare(b.file_name),
+  name_desc: (a, b) => b.file_name.localeCompare(a.file_name),
+  size_desc: (a, b) => (b.total_size || 0) - (a.total_size || 0),
+  size_asc: (a, b) => (a.total_size || 0) - (b.total_size || 0),
+  type_asc: (a, b) => getFileExtension(a).localeCompare(getFileExtension(b)),
+  type_desc: (a, b) => getFileExtension(b).localeCompare(getFileExtension(a)),
+};
+
+function getFileExtension(manifest) {
+  const name = manifest?.file_name || "";
+  const idx = name.lastIndexOf(".");
+  if (idx === -1) return "unknown";
+  return name.substring(idx + 1).toLowerCase() || "unknown";
+}
+
+function updateBulkButtons() {
+  const hasSelection = selectedManifests.size > 0;
+  if (downloadSelectedBtn) downloadSelectedBtn.disabled = !hasSelection;
+  if (deleteSelectedBtn) deleteSelectedBtn.disabled = !hasSelection;
+  if (healthSelectedBtn) healthSelectedBtn.disabled = !hasSelection;
 }
 
 function handleEmptyState() {
@@ -54,7 +135,24 @@ function handleEmptyState() {
     manifestListEl.classList.add("hidden");
     emptyStateEl.classList.remove("hidden");
   }
-  updateBulkDownloadState();
+  updateBulkButtons();
+}
+
+function getGroupKey(manifest) {
+  if (currentGroup === "type") return getFileExtension(manifest);
+  if (currentGroup === "date") {
+    const date = new Date(manifest.created_at);
+    if (Number.isNaN(date.getTime())) return "Unknown date";
+    return date.toLocaleDateString();
+  }
+  return null;
+}
+
+function createGroupHeader(label) {
+  const div = document.createElement("div");
+  div.className = "manifest-group";
+  div.textContent = label;
+  return div;
 }
 
 function renderManifestCard(manifest) {
@@ -67,13 +165,14 @@ function renderManifestCard(manifest) {
   const selectBox = document.createElement("input");
   selectBox.type = "checkbox";
   selectBox.className = "manifest-select";
+  selectBox.checked = selectedManifests.has(manifest.id);
   selectBox.addEventListener("change", e => {
     if (e.target.checked) {
       selectedManifests.add(manifest.id);
     } else {
       selectedManifests.delete(manifest.id);
     }
-    updateBulkDownloadState();
+    updateBulkButtons();
   });
 
   const title = document.createElement("h2");
@@ -164,17 +263,16 @@ function renderManifestCard(manifest) {
 
   deleteBtn.addEventListener("click", () => {
     deleteManifest(manifest, {
-      card,
-      status,
       buttons: [downloadBtn, deleteBtn, healthBtn],
+      status,
     });
   });
 
   healthBtn.addEventListener("click", () => {
     checkManifestHealth(manifest, {
       button: healthBtn,
-      status,
       block: healthBlock,
+      status,
       summaryEl: healthSummary,
       barFill: healthBarFill,
       issuesEl: healthIssues,
@@ -190,9 +288,38 @@ function renderManifestCard(manifest) {
     progressFill,
     status,
     selectBox,
+    healthButton: healthBtn,
+    healthBlock,
+    healthSummary,
+    healthBarFill,
+    healthIssues,
+    buttons: [downloadBtn, deleteBtn, healthBtn],
   });
 
   return card;
+}
+
+function renderManifestList() {
+  if (!manifestListEl) return;
+  manifestListEl.innerHTML = "";
+  manifestControllers.clear();
+  manifestDataMap.clear();
+
+  const sorter = SORTERS[currentSort] || SORTERS.newest;
+  const sorted = [...manifestData].sort(sorter);
+
+  let lastGroup = null;
+  sorted.forEach(manifest => {
+    manifestDataMap.set(manifest.id, manifest);
+    const groupKey = getGroupKey(manifest);
+    if (groupKey && groupKey !== lastGroup) {
+      manifestListEl.appendChild(createGroupHeader(groupKey));
+      lastGroup = groupKey;
+    }
+    manifestListEl.appendChild(renderManifestCard(manifest));
+  });
+
+  handleEmptyState();
 }
 
 async function downloadManifest(manifest, ui) {
@@ -200,6 +327,9 @@ async function downloadManifest(manifest, ui) {
     ui.status.textContent = "No chunks recorded for this file.";
     return;
   }
+
+  beginDownloadStatus();
+  let downloadSucceeded = false;
 
   const sortedChunks = [...manifest.chunks].sort((a, b) => a.index - b.index);
   let downloadedBytes = 0;
@@ -267,36 +397,47 @@ async function downloadManifest(manifest, ui) {
           return;
         }
         ui.status.textContent = "Forcing download despite checksum mismatch.";
-      } else if (computedHash && computedHash === expectedFileHash) {
+      } else if (computedHash) {
         ui.status.textContent = "Integrity verified. Preparing download...";
       }
     }
 
     const url = window.URL.createObjectURL(blob);
-
     const link = document.createElement("a");
     link.href = url;
     link.download = manifest.file_name || "download.bin";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-
     window.setTimeout(() => window.URL.revokeObjectURL(url), 5000);
+
     ui.progressFill.style.width = "100%";
     ui.status.textContent = "Download ready.";
+    downloadSucceeded = true;
   } catch (error) {
     console.error(error);
     ui.status.textContent = `Failed: ${error.message}`;
+    downloadSucceeded = false;
   } finally {
     ui.button.disabled = false;
+    endDownloadStatus(downloadSucceeded);
   }
 }
 
-async function deleteManifest(manifest, ui) {
-  const confirmed = window.confirm(`Delete "${manifest.file_name}" and all Drive chunks?`);
-  if (!confirmed) return;
+function removeManifestFromState(manifestId) {
+  manifestData = manifestData.filter(m => m.id !== manifestId);
+  manifestDataMap.delete(manifestId);
+  manifestControllers.delete(manifestId);
+  selectedManifests.delete(manifestId);
+}
 
-  ui.buttons.forEach(btn => {
+async function deleteManifest(manifest, ui, opts = {}) {
+  if (!opts.skipConfirm) {
+    const confirmed = window.confirm(`Delete "${manifest.file_name}" and all Drive chunks?`);
+    if (!confirmed) return false;
+  }
+
+  (ui.buttons || []).forEach(btn => {
     // eslint-disable-next-line no-param-reassign
     btn.disabled = true;
   });
@@ -317,21 +458,21 @@ async function deleteManifest(manifest, ui) {
       throw new Error(errTxt || "Delete failed");
     }
 
-    ui.status.textContent = "Deleted.";
-    ui.card.remove();
-    selectedManifests.delete(manifest.id);
-    const controller = manifestControllers.get(manifest.id);
-    if (controller?.selectBox) controller.selectBox.checked = false;
-    manifestControllers.delete(manifest.id);
-    manifestDataMap.delete(manifest.id);
-    handleEmptyState();
+    removeManifestFromState(manifest.id);
+    if (!opts.suppressRender) {
+      renderManifestList();
+    } else {
+      updateBulkButtons();
+    }
+    return true;
   } catch (error) {
     console.error(error);
     ui.status.textContent = `Delete failed: ${error.message}`;
-    ui.buttons.forEach(btn => {
+    (ui.buttons || []).forEach(btn => {
       // eslint-disable-next-line no-param-reassign
       btn.disabled = false;
     });
+    return false;
   }
 }
 
@@ -405,13 +546,17 @@ async function checkManifestHealth(manifest, ui) {
 
 document.addEventListener("DOMContentLoaded", () => {
   const script = document.getElementById("manifest-data");
-  const manifests = script ? JSON.parse(script.textContent) : [];
+  manifestData = script ? JSON.parse(script.textContent) : [];
+
   manifestListEl = document.getElementById("manifestList");
   emptyStateEl = document.getElementById("emptyState");
   downloadSelectedBtn = document.getElementById("downloadSelected");
-
+  deleteSelectedBtn = document.getElementById("deleteSelected");
+  healthSelectedBtn = document.getElementById("healthSelected");
   selectAllBtn = document.getElementById("selectAllManifests");
   clearSelectedBtn = document.getElementById("clearSelectedManifests");
+  sortSelect = document.getElementById("sortManifests");
+  groupSelect = document.getElementById("groupManifests");
 
   selectAllBtn?.addEventListener("click", () => {
     manifestControllers.forEach((ctrl, id) => {
@@ -420,7 +565,7 @@ document.addEventListener("DOMContentLoaded", () => {
         selectedManifests.add(id);
       }
     });
-    updateBulkDownloadState();
+    updateBulkButtons();
   });
 
   clearSelectedBtn?.addEventListener("click", () => {
@@ -428,7 +573,17 @@ document.addEventListener("DOMContentLoaded", () => {
       if (ctrl.selectBox) ctrl.selectBox.checked = false;
     });
     selectedManifests.clear();
-    updateBulkDownloadState();
+    updateBulkButtons();
+  });
+
+  sortSelect?.addEventListener("change", e => {
+    currentSort = e.target.value;
+    renderManifestList();
+  });
+
+  groupSelect?.addEventListener("change", e => {
+    currentGroup = e.target.value;
+    renderManifestList();
   });
 
   downloadSelectedBtn?.addEventListener("click", async () => {
@@ -449,18 +604,51 @@ document.addEventListener("DOMContentLoaded", () => {
       if (ctrl.selectBox) ctrl.selectBox.checked = false;
     });
     downloadSelectedBtn.disabled = false;
-    updateBulkDownloadState();
+    updateBulkButtons();
   });
 
-  if (!manifests.length) {
-    handleEmptyState();
-    return;
-  }
-
-  manifestListEl.classList.remove("hidden");
-  emptyStateEl.classList.add("hidden");
-  manifests.forEach(manifest => {
-    manifestDataMap.set(manifest.id, manifest);
-    manifestListEl.appendChild(renderManifestCard(manifest));
+  deleteSelectedBtn?.addEventListener("click", async () => {
+    if (!selectedManifests.size) return;
+    if (!window.confirm(`Delete ${selectedManifests.size} selected file(s) and all Drive chunks?`)) return;
+    deleteSelectedBtn.disabled = true;
+    const ids = Array.from(selectedManifests);
+    for (const id of ids) {
+      const manifest = manifestDataMap.get(id);
+      const controller = manifestControllers.get(id);
+      if (!manifest || !controller) continue;
+      try {
+        await deleteManifest(manifest, controller, { skipConfirm: true, suppressRender: true });
+      } catch (error) {
+        console.error("Batch delete failed", error);
+      }
+    }
+    deleteSelectedBtn.disabled = false;
+    renderManifestList();
   });
+
+  healthSelectedBtn?.addEventListener("click", async () => {
+    if (!selectedManifests.size) return;
+    healthSelectedBtn.disabled = true;
+    for (const id of Array.from(selectedManifests)) {
+      const manifest = manifestDataMap.get(id);
+      const controller = manifestControllers.get(id);
+      if (!manifest || !controller) continue;
+      try {
+        await checkManifestHealth(manifest, {
+          button: controller.healthButton,
+          block: controller.healthBlock,
+          status: controller.status,
+          summaryEl: controller.healthSummary,
+          barFill: controller.healthBarFill,
+          issuesEl: controller.healthIssues,
+        });
+      } catch (error) {
+        console.error("Batch health check failed", error);
+      }
+    }
+    healthSelectedBtn.disabled = false;
+    updateBulkButtons();
+  });
+
+  renderManifestList();
 });

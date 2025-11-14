@@ -5,19 +5,15 @@
   padding: 0;
 }
 
-body {
-  font-family: "Inter", sans-serif;
-  background: #f7f9fc;
-  color: #343a40;
+.upload-layout {
   display: flex;
-  justify-content: center;
   align-items: flex-start;
-  min-height: 100vh;
-  padding: 20px;
+  gap: 32px;
+  width: 100%;
+  flex-wrap: wrap;
 }
 
-/* ---- Main Container ---- */
-.upload-container {
+.upload-panel {
   background: #fff;
   border-radius: 16px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
@@ -25,6 +21,87 @@ body {
   width: 100%;
   max-width: 640px;
   padding: 30px 40px;
+}
+
+.progress-panel {
+  flex: 1;
+  min-width: 320px;
+  background: #fff;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.05);
+  border: 1px solid #e9ecef;
+  padding: 24px 30px;
+  min-height: 400px;
+}
+
+.progress-panel h2 {
+  margin-top: 0;
+}
+
+.progress-panel #progressContainer {
+  border-top: 1px solid #e9ecef;
+  margin-top: 18px;
+  padding-top: 12px;
+}
+
+.status-banner {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid #cbd5f5;
+  background: #eef2ff;
+  font-size: 0.95rem;
+  color: #1f2a3d;
+}
+
+.status-banner.active {
+  border-color: #fbbf24;
+  background: #fff7e6;
+  color: #92400e;
+}
+
+.status-banner.success {
+  border-color: #a7f3d0;
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.status-banner.error {
+  border-color: #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+}
+
+.status-banner.hidden {
+  display: none;
+}
+
+.drop-zone {
+  border: 2px dashed #b6ccff;
+  border-radius: 14px;
+  padding: 20px;
+  text-align: center;
+  background: #f6f9ff;
+  margin-bottom: 16px;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.drop-zone.drag-over {
+  border-color: #2563eb;
+  background: #eef4ff;
+}
+
+.drop-zone .browse-link {
+  color: #2563eb;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.drop-zone small {
+  display: block;
+  margin-top: 8px;
+  color: #6b7280;
 }
 
 /* ---- Typography ---- */
@@ -322,13 +399,6 @@ button:disabled {
   margin-bottom: 12px;
 }
 
-/* ---- Progress Bars (JS-Generated) ---- */
-#progressContainer {
-  margin-top: 25px;
-  border-top: 1px solid #e9ecef;
-  padding-top: 20px;
-}
-
 .progress-item {
   margin-bottom: 15px;
   display: grid;
@@ -393,4 +463,14 @@ button:disabled {
   font-size: 24px;
   font-weight: bold;
   justify-self: center;
+}
+
+@media (max-width: 960px) {
+  .upload-layout {
+    flex-direction: column;
+  }
+  .upload-panel,
+  .progress-panel {
+    max-width: 100%;
+  }
 }

@@ -8,6 +8,7 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import render, redirect, get_object_or_404
+from urllib.parse import urlencode
 #chunking
 from django.http import JsonResponse
 from google.oauth2.credentials import Credentials
@@ -160,23 +161,10 @@ def disconnect_google(request, pk: int):
 
 def register(request):
     """
-    Register a new user.
-    Uses your local SignUpForm if present; otherwise falls back to Django's UserCreationForm.
+    Local username/password registration is disabled.
+    Always send users to Google sign-in.
     """
-    FormClass = SignUpForm if SignUpForm else UserCreationForm
-
-    if request.method == "POST":
-        form = FormClass(request.POST)
-        if form.is_valid():
-            user = form.save()
-            auth_login(request, user)
-            messages.success(request, "Registration successful. Welcome!")
-            return redirect("dashboard")
-    else:
-        form = FormClass()
-
-    # Use your existing template; adjust name if yours differs
-    return render(request, "register.html", {"form": form})
+    return redirect("/accounts/google/login/")
 
 
 @login_required
@@ -186,6 +174,23 @@ def profile(request):
     Extend with whatever context your template expects.
     """
     return render(request, "profile.html", {})
+
+
+def google_login_redirect(request):
+    """
+    Redirect any legacy login/signup URLs straight to Google's OAuth flow.
+    """
+    params = {}
+    next_url = request.GET.get("next")
+    if next_url:
+        params["next"] = next_url
+    qs = f"?{urlencode(params)}" if params else ""
+    return redirect(f"/accounts/google/login/{qs}")
+
+
+def google_cancel_redirect(request):
+    messages.warning(request, "Google sign-in was cancelled. Please try again.")
+    return google_login_redirect(request)
 
 
 # --- keep all your existing imports + helpers as-is ---

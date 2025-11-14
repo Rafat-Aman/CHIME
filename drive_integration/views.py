@@ -1,12 +1,12 @@
 import json
 import requests
+from urllib.parse import urlparse
 from datetime import timedelta
 from django.utils.timezone import now
 from django.conf import settings
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse, HttpResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 from allauth.socialaccount.models import SocialAccount, SocialToken
 
@@ -155,7 +155,6 @@ def create_upload_session(request):
 # --------------------------------------------------------------------
 # API: Proxy chunk upload (raw body) — allow large body via wsgi.input read
 # --------------------------------------------------------------------
-@csrf_exempt
 @login_required
 def proxy_resumable_chunk(request):
     if request.method != "POST":
@@ -176,8 +175,24 @@ def proxy_resumable_chunk(request):
     except ValueError:
         return JsonResponse({"error": "start/end must be integers"}, status=400)
 
+    parsed_url = urlparse(upload_url)
+    allowed_host_suffixes = getattr(
+        settings,
+        "GOOGLE_UPLOAD_HOSTS",
+        ("www.googleapis.com", "googleapis.com"),
+    )
+    host = (parsed_url.netloc or "").split(":")[0].lower()
+    if parsed_url.scheme != "https" or not any(
+        host == suffix or host.endswith(f".{suffix}") for suffix in allowed_host_suffixes
+    ) or not parsed_url.path.startswith("/upload/drive/v3/files"):
+        return JsonResponse({"error": "Invalid upload URL."}, status=400)
+
+    max_chunk_bytes = getattr(settings, "MAX_PROXY_CHUNK_BYTES", 1024 * 1024 * 1024)
+
     # Read raw body
-    body_bytes = request.META.get("wsgi.input").read()
+    body_bytes = request.body
+    if len(body_bytes) > max_chunk_bytes:
+        return JsonResponse({"error": "Chunk too large."}, status=413)
     if not body_bytes:
         return JsonResponse({"error": "Empty body"}, status=400)
 

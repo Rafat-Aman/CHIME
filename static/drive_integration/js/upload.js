@@ -16,6 +16,8 @@ const toMB = b => (b / BYTES_PER_MB).toFixed(1);
 
 const chunkSizeInput = document.getElementById("chunkSize");
 const fileInput = document.getElementById("fileInput");
+const fileDropZone = document.getElementById("fileDropZone");
+const fileBrowseTrigger = document.getElementById("fileBrowseTrigger");
 const uploadBtn = document.getElementById("uploadBtn");
 const warningEl = document.getElementById("total-warning");
 const fileListWrapper = document.getElementById("selected-files-wrapper");
@@ -26,6 +28,8 @@ const fileSizeEl = document.getElementById("file-size");
 const totalChunksEl = document.getElementById("total-chunks");
 const progressContainer = document.getElementById("progressContainer");
 const accountBlocks = Array.from(document.querySelectorAll(".account-block"));
+const uploadStatusBanner = document.getElementById("uploadStatus");
+const uploadStatusText = document.getElementById("uploadStatusText");
 
 let chunkSizeMB = parseInt(chunkSizeInput.value, 10) || 500;
 let chunkSizeBytes = chunkSizeMB * BYTES_PER_MB;
@@ -36,6 +40,41 @@ let userAdjustedDistribution = false;
 
 const fileEntries = [];
 let activeFileIndex = -1;
+let uploadsRunning = false;
+let uploadHadErrors = false;
+
+function updateUploadStatus(state, message) {
+  if (!uploadStatusBanner || !uploadStatusText) return;
+  uploadStatusBanner.classList.remove("hidden", "active", "success", "error");
+  if (state === "active") {
+    uploadStatusBanner.classList.add("active");
+  } else if (state === "success") {
+    uploadStatusBanner.classList.add("success");
+  } else if (state === "error") {
+    uploadStatusBanner.classList.add("error");
+  }
+  const fallback = {
+    idle: "Idle",
+    active: "Uploading...",
+    success: "All uploads complete.",
+    error: "Upload interrupted.",
+  };
+  uploadStatusText.textContent = message || fallback[state] || "Status";
+  uploadStatusBanner.classList.remove("hidden");
+}
+
+updateUploadStatus("idle", "Waiting for upload.");
+
+window.addEventListener("beforeunload", event => {
+  if (uploadsRunning) {
+    event.preventDefault();
+    event.returnValue = "";
+  }
+});
+
+function fileKey(file) {
+  return `${file.name}-${file.size}-${file.lastModified}`;
+}
 
 function parseRemainingMB(value) {
   if (!value) return 0;
@@ -173,22 +212,31 @@ function setActiveFile(index) {
   startEntryChecksum(getActiveEntry());
 }
 
-function setSelectedFiles(fileList) {
-  fileEntries.length = 0;
-  Array.from(fileList || []).forEach(file => {
+function addFiles(fileList) {
+  if (!fileList || !fileList.length) return;
+  const existingKeys = new Set(fileEntries.map(entry => entry.key));
+  let added = false;
+  Array.from(fileList).forEach(file => {
+    const key = fileKey(file);
+    if (existingKeys.has(key)) return;
     fileEntries.push({
       file,
+      key,
       checksum: "",
       checksumPromise: null,
       checksumContext: 0,
     });
+    existingKeys.add(key);
+    added = true;
   });
-  activeFileIndex = fileEntries.length ? 0 : -1;
+  if (!added) return;
+  if (activeFileIndex === -1) activeFileIndex = 0;
   userAdjustedDistribution = false;
   recalcTotals();
   renderFileList();
   updateFileInfo();
-  if (fileEntries.length) startEntryChecksum(getActiveEntry());
+  startEntryChecksum(getActiveEntry());
+  updateUploadStatus("idle", "Files queued. Start upload when ready.");
 }
 
 function getAccountCapacityChunks(block) {
@@ -282,6 +330,58 @@ function readAllocationFromSliders() {
   return allocation;
 }
 
+function updateSlidersWithAllocation(updated) {
+  accountBlocks.forEach(block => {
+    const slider = block.querySelector(".chunk-slider");
+    const value = Math.max(0, Math.min(parseInt(slider.max, 10) || 0, updated[block.dataset.id] || 0));
+    slider.value = value;
+    updateSliderValueUI(block, value);
+  });
+}
+
+function redistributeAllocation(changedId, desiredValue) {
+  const current = readAllocationFromSliders();
+  const max = accountBlocks.reduce((sum, block) => sum + (parseInt(block.querySelector(".chunk-slider").max, 10) || 0), 0);
+  const totalChunks = totalChunksOverall;
+  const clampedValue = Math.max(0, Math.min(parseInt(document.querySelector(`.account-block[data-id="${changedId}"] .chunk-slider`).max, 10) || 0, desiredValue));
+  current[changedId] = clampedValue;
+
+  let remaining = totalChunks - clampedValue;
+  const otherBlocks = accountBlocks.filter(block => block.dataset.id !== changedId);
+
+  const available = otherBlocks.map(block => ({
+    id: block.dataset.id,
+    max: parseInt(block.querySelector(".chunk-slider").max, 10) || 0,
+  }));
+
+  let sumCurrentOthers = available.reduce((sum, entry) => sum + (current[entry.id] || 0), 0);
+
+  if (sumCurrentOthers > remaining) {
+    let excess = sumCurrentOthers - remaining;
+    const sorted = [...available].sort((a, b) => (current[b.id] || 0) - (current[a.id] || 0));
+    for (const entry of sorted) {
+      if (excess <= 0) break;
+      const allotted = current[entry.id] || 0;
+      const reduction = Math.min(allotted, excess);
+      current[entry.id] = allotted - reduction;
+      excess -= reduction;
+    }
+  } else if (sumCurrentOthers < remaining) {
+    let deficit = remaining - sumCurrentOthers;
+    const sorted = [...available].sort((a, b) => ((b.max - (current[b.id] || 0)) - (a.max - (current[a.id] || 0))));
+    for (const entry of sorted) {
+      if (deficit <= 0) break;
+      const allot = Math.min(entry.max - (current[entry.id] || 0), deficit);
+      current[entry.id] = (current[entry.id] || 0) + allot;
+      deficit -= allot;
+    }
+  }
+
+  updateSlidersWithAllocation(current);
+  userAdjustedDistribution = true;
+  validateTotals();
+}
+
 function recalcTotals() {
   chunkSizeBytes = chunkSizeMB * BYTES_PER_MB;
   totalBytesOverall = fileEntries.reduce((sum, entry) => sum + entry.file.size, 0);
@@ -364,8 +464,44 @@ function updateBar(block, uploaded, total) {
   block.querySelector(".progress-text").textContent = `${toMB(uploaded)} / ${toMB(total)} MB`;
 }
 
-fileInput.addEventListener("change", e => {
-  setSelectedFiles(e.target.files);
+if (fileBrowseTrigger) {
+  fileBrowseTrigger.addEventListener("click", e => {
+    e.preventDefault();
+    fileInput?.click();
+  });
+}
+
+if (fileDropZone) {
+  fileDropZone.addEventListener("click", e => {
+    if (e.target !== fileInput) fileInput?.click();
+  });
+
+  ["dragenter", "dragover"].forEach(evt => {
+    fileDropZone.addEventListener(evt, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      fileDropZone.classList.add("drag-over");
+    });
+  });
+
+  ["dragleave", "dragend"].forEach(evt => {
+    fileDropZone.addEventListener(evt, e => {
+      e.preventDefault();
+      e.stopPropagation();
+      fileDropZone.classList.remove("drag-over");
+    });
+  });
+
+  fileDropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    fileDropZone.classList.remove("drag-over");
+    addFiles(e.dataTransfer.files);
+  });
+}
+
+fileInput?.addEventListener("change", e => {
+  addFiles(e.target.files);
+  e.target.value = "";
 });
 
 chunkSizeInput.addEventListener("input", e => {
@@ -382,8 +518,7 @@ document.querySelectorAll(".chunk-slider").forEach(slider => {
     const block = e.target.closest(".account-block");
     const value = parseInt(e.target.value, 10) || 0;
     updateSliderValueUI(block, value);
-    userAdjustedDistribution = true;
-    validateTotals();
+    redistributeAllocation(block.dataset.id, value);
   });
   slider.addEventListener("mousemove", e => {
     const tooltip = slider.parentElement.querySelector(".tooltip");
@@ -420,186 +555,205 @@ uploadBtn.addEventListener("click", async () => {
     chunkAllocationRemaining[id] = allocation[id];
   });
 
-  for (const entry of fileEntries) {
-    const currentFile = entry.file;
-    const fileSection = document.createElement("div");
-    fileSection.className = "file-progress";
-    fileSection.innerHTML = `<h3>${currentFile.name}</h3>`;
-    progressContainer.appendChild(fileSection);
+  uploadsRunning = true;
+  uploadHadErrors = false;
+  updateUploadStatus("active", "Uploading files...");
 
-    const fileChunks = Math.max(1, Math.ceil(currentFile.size / chunkSizeBytes));
-    const perFileAllocation = {};
-    let remainingForFile = fileChunks;
+  try {
+    for (const entry of fileEntries) {
+      const currentFile = entry.file;
+      const fileSection = document.createElement("div");
+      fileSection.className = "file-progress";
+      fileSection.innerHTML = `<h3>${currentFile.name}</h3>`;
+      progressContainer.appendChild(fileSection);
 
-    for (const block of accountBlocks) {
-      if (!remainingForFile) break;
-      const accountId = block.dataset.id;
-      const available = chunkAllocationRemaining[accountId] || 0;
-      if (!available) continue;
-      const take = Math.min(available, remainingForFile);
-      perFileAllocation[accountId] = take;
-      chunkAllocationRemaining[accountId] -= take;
-      remainingForFile -= take;
-    }
+      const fileChunks = Math.max(1, Math.ceil(currentFile.size / chunkSizeBytes));
+      const perFileAllocation = {};
+      let remainingForFile = fileChunks;
 
-    if (remainingForFile > 0) {
-      const warn = document.createElement("div");
-      warn.textContent = "Upload aborted — insufficient chunk allocation for this file.";
-      fileSection.appendChild(warn);
-      break;
-    }
+      for (const block of accountBlocks) {
+        if (!remainingForFile) break;
+        const accountId = block.dataset.id;
+        const available = chunkAllocationRemaining[accountId] || 0;
+        if (!available) continue;
+        const take = Math.min(available, remainingForFile);
+        perFileAllocation[accountId] = take;
+        chunkAllocationRemaining[accountId] -= take;
+        remainingForFile -= take;
+      }
 
-    const overallChecksum = await ensureEntryChecksum(entry);
-    if (!overallChecksum) {
-      const warn = document.createElement("div");
-      warn.textContent = "Skipped — unable to compute file checksum.";
-      fileSection.appendChild(warn);
-      continue;
-    }
-
-    const manifest = [];
-    let chunkIndex = 0;
-    let aborted = false;
-
-    for (const block of accountBlocks) {
-      const accountId = block.dataset.id;
-      const chunksForAcc = perFileAllocation[accountId] || 0;
-      if (!chunksForAcc) continue;
-
-      const progressBlock = createProgressBar(block.querySelector(".acc-email").textContent, fileSection);
-      let uploadedBytes = 0;
-      const totalUploadBytes = Math.min(
-        currentFile.size - (chunkIndex * chunkSizeBytes),
-        chunksForAcc * chunkSizeBytes,
-      );
-
-      for (let i = 0; i < chunksForAcc; i += 1) {
-        const start = chunkIndex * chunkSizeBytes;
-        const end = Math.min(start + chunkSizeBytes, currentFile.size);
-        const blob = currentFile.slice(start, end);
-
-        let chunkHash = "";
-        try {
-          chunkHash = await checksum(blob);
-        } catch (err) {
-          console.error("Chunk checksum failed", err);
-        }
-
-        const createRes = await fetch(CREATE_SESSION_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
-          body: JSON.stringify({
-            file_name: currentFile.name,
-            mime_type: currentFile.type || "application/octet-stream",
-            account_id: accountId,
-            chunk_index: chunkIndex,
-          }),
-        });
-
-        if (!createRes.ok) {
-          progressBlock.querySelector(".retry").classList.remove("hidden");
-          progressBlock.querySelector(".progress-inner").style.background = "#f55";
-          console.error("Create session failed", await createRes.text());
-          aborted = true;
-          break;
-        }
-
-        const createData = await createRes.json();
-        const uploadUrl = createData.upload_url;
-        if (!uploadUrl) {
-          console.error("No upload_url from server", createData);
-          aborted = true;
-          break;
-        }
-
-        const qs = new URLSearchParams({
-          upload_url: uploadUrl,
-          account_id: accountId,
-          start: 0,
-          end: blob.size - 1,
-          mime: currentFile.type || "application/octet-stream",
-        });
-
-        const putRes = await fetch(`${PROXY_CHUNK_URL}?${qs.toString()}`, {
-          method: "POST",
-          headers: { "X-CSRFToken": csrf() },
-          body: blob,
-        });
-
-        if (putRes.status === 200 || putRes.status === 201) {
-          let driveFileId = null;
-          try {
-            const text = await putRes.text();
-            driveFileId = JSON.parse(text || "{}").id || null;
-          } catch (err) {
-            console.warn("Failed to parse drive response JSON", err);
-          }
-
-          uploadedBytes += blob.size;
-          updateBar(progressBlock, uploadedBytes, totalUploadBytes);
-
-          manifest.push({
-            index: chunkIndex,
-            account_id: parseInt(accountId, 10),
-            drive_file_id: driveFileId,
-            size: blob.size,
-            checksum: chunkHash,
-            uploaded_at: new Date().toISOString(),
-          });
-
-          chunkIndex += 1;
-          continue;
-        }
-
-        if (putRes.status === 308) {
-          uploadedBytes += blob.size;
-          updateBar(progressBlock, uploadedBytes, totalUploadBytes);
-          chunkIndex += 1;
-          continue;
-        }
-
-        console.error("Chunk upload failed", putRes.status, await putRes.text());
-        progressBlock.querySelector(".retry").classList.remove("hidden");
-        progressBlock.querySelector(".progress-inner").style.background = "#f55";
-        aborted = true;
+      if (remainingForFile > 0) {
+        const warn = document.createElement("div");
+        warn.textContent = "Upload aborted — insufficient chunk allocation for this file.";
+        fileSection.appendChild(warn);
+        uploadHadErrors = true;
         break;
       }
 
-      if (aborted) break;
-      progressBlock.querySelector(".checkmark").classList.remove("hidden");
+      const overallChecksum = await ensureEntryChecksum(entry);
+      if (!overallChecksum) {
+        const warn = document.createElement("div");
+        warn.textContent = "Skipped — unable to compute file checksum.";
+        fileSection.appendChild(warn);
+        uploadHadErrors = true;
+        continue;
+      }
+
+      const manifest = [];
+      let chunkIndex = 0;
+      let aborted = false;
+
+      for (const block of accountBlocks) {
+        const accountId = block.dataset.id;
+        const chunksForAcc = perFileAllocation[accountId] || 0;
+        if (!chunksForAcc) continue;
+
+        const progressBlock = createProgressBar(block.querySelector(".acc-email").textContent, fileSection);
+        let uploadedBytes = 0;
+        const totalUploadBytes = Math.min(
+          currentFile.size - (chunkIndex * chunkSizeBytes),
+          chunksForAcc * chunkSizeBytes,
+        );
+
+        for (let i = 0; i < chunksForAcc; i += 1) {
+          const start = chunkIndex * chunkSizeBytes;
+          const end = Math.min(start + chunkSizeBytes, currentFile.size);
+          const blob = currentFile.slice(start, end);
+
+          let chunkHash = "";
+          try {
+            chunkHash = await checksum(blob);
+          } catch (err) {
+            console.error("Chunk checksum failed", err);
+          }
+
+          const createRes = await fetch(CREATE_SESSION_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+            body: JSON.stringify({
+              file_name: currentFile.name,
+              mime_type: currentFile.type || "application/octet-stream",
+              account_id: accountId,
+              chunk_index: chunkIndex,
+            }),
+          });
+
+          if (!createRes.ok) {
+            progressBlock.querySelector(".retry").classList.remove("hidden");
+            progressBlock.querySelector(".progress-inner").style.background = "#f55";
+            console.error("Create session failed", await createRes.text());
+            uploadHadErrors = true;
+            aborted = true;
+            break;
+          }
+
+          const createData = await createRes.json();
+          const uploadUrl = createData.upload_url;
+          if (!uploadUrl) {
+            console.error("No upload_url from server", createData);
+            uploadHadErrors = true;
+            aborted = true;
+            break;
+          }
+
+          const qs = new URLSearchParams({
+            upload_url: uploadUrl,
+            account_id: accountId,
+            start: 0,
+            end: blob.size - 1,
+            mime: currentFile.type || "application/octet-stream",
+          });
+
+          const putRes = await fetch(`${PROXY_CHUNK_URL}?${qs.toString()}`, {
+            method: "POST",
+            headers: { "X-CSRFToken": csrf() },
+            body: blob,
+          });
+
+          if (putRes.status === 200 || putRes.status === 201) {
+            let driveFileId = null;
+            try {
+              const text = await putRes.text();
+              driveFileId = JSON.parse(text || "{}").id || null;
+            } catch (err) {
+              console.warn("Failed to parse drive response JSON", err);
+            }
+
+            uploadedBytes += blob.size;
+            updateBar(progressBlock, uploadedBytes, totalUploadBytes);
+
+            manifest.push({
+              index: chunkIndex,
+              account_id: parseInt(accountId, 10),
+              drive_file_id: driveFileId,
+              size: blob.size,
+              checksum: chunkHash,
+              uploaded_at: new Date().toISOString(),
+            });
+
+            chunkIndex += 1;
+            continue;
+          }
+
+          if (putRes.status === 308) {
+            uploadedBytes += blob.size;
+            updateBar(progressBlock, uploadedBytes, totalUploadBytes);
+            chunkIndex += 1;
+            continue;
+          }
+
+          console.error("Chunk upload failed", putRes.status, await putRes.text());
+          progressBlock.querySelector(".retry").classList.remove("hidden");
+          progressBlock.querySelector(".progress-inner").style.background = "#f55";
+          uploadHadErrors = true;
+          aborted = true;
+          break;
+        }
+
+        if (aborted) break;
+        progressBlock.querySelector(".checkmark").classList.remove("hidden");
+      }
+
+      if (aborted) {
+        const note = document.createElement("div");
+        note.textContent = "Upload aborted due to an error.";
+        fileSection.appendChild(note);
+        uploadHadErrors = true;
+        break;
+      }
+
+      const saveRes = await fetch(SAVE_MANIFEST_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+        body: JSON.stringify({
+          file_name: currentFile.name,
+          total_size: currentFile.size,
+          chunk_size: chunkSizeBytes,
+          total_chunks: fileChunks,
+          file_checksum: overallChecksum,
+          chunks: manifest,
+        }),
+      });
+
+      if (!saveRes.ok) {
+        const failNote = document.createElement("div");
+        failNote.textContent = "Failed to save manifest.";
+        fileSection.appendChild(failNote);
+        console.error("Saving manifest failed", await saveRes.text());
+        uploadHadErrors = true;
+        continue;
+      }
+
+      const saved = await saveRes.json();
+      const done = document.createElement("div");
+      done.textContent = `Upload complete — manifest saved (ID ${saved.id}).`;
+      fileSection.appendChild(done);
     }
-
-    if (aborted) {
-      const note = document.createElement("div");
-      note.textContent = "Upload aborted due to an error.";
-      fileSection.appendChild(note);
-      break;
-    }
-
-    const saveRes = await fetch(SAVE_MANIFEST_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
-      body: JSON.stringify({
-        file_name: currentFile.name,
-        total_size: currentFile.size,
-        chunk_size: chunkSizeBytes,
-        total_chunks: fileChunks,
-        file_checksum: overallChecksum,
-        chunks: manifest,
-      }),
-    });
-
-    if (!saveRes.ok) {
-      const failNote = document.createElement("div");
-      failNote.textContent = "Failed to save manifest.";
-      fileSection.appendChild(failNote);
-      console.error("Saving manifest failed", await saveRes.text());
-      continue;
-    }
-
-    const saved = await saveRes.json();
-    const done = document.createElement("div");
-    done.textContent = `Upload complete — manifest saved (ID ${saved.id}).`;
-    fileSection.appendChild(done);
+  } finally {
+    uploadsRunning = false;
+    updateUploadStatus(
+      uploadHadErrors ? "error" : "success",
+      uploadHadErrors ? "Uploads finished with issues." : "All uploads complete."
+    );
   }
 });

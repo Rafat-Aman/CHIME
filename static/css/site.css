@@ -36,6 +36,7 @@ html,
 body {
   margin: 0;
   padding: 0;
+  min-height: 100%;
 }
 
 body {
@@ -43,7 +44,15 @@ body {
   background: var(--bg);
   color: var(--text);
   min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   transition: background 0.2s ease, color 0.2s ease;
+}
+
+.page-content {
+  flex: 1;
+  width: 100%;
+  padding-top: 32px;
 }
 
 .container {
@@ -277,13 +286,9 @@ body {
   color: #ffc8c8;
 }
 
-main.container {
-  padding-top: 32px;
-}
-
 .site-footer {
   border-top: 1px solid var(--border);
-  margin-top: 48px;
+  margin-top: auto;
   background: var(--panel);
 }
 
