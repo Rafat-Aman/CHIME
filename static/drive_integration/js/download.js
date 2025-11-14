@@ -78,6 +78,33 @@ function renderManifestCard(manifest) {
   deleteBtn.classList.add("delete");
   actions.appendChild(deleteBtn);
 
+  const healthBtn = document.createElement("button");
+  healthBtn.type = "button";
+  healthBtn.textContent = "Check Health";
+  healthBtn.classList.add("health");
+  actions.appendChild(healthBtn);
+
+  const healthBlock = document.createElement("div");
+  healthBlock.className = "health-block hidden";
+
+  const healthSummary = document.createElement("div");
+  healthSummary.className = "health-summary";
+  healthSummary.textContent = "Run health check to verify chunks.";
+
+  const healthBar = document.createElement("div");
+  healthBar.className = "health-bar";
+  const healthBarFill = document.createElement("div");
+  healthBarFill.className = "health-bar-fill";
+  healthBar.appendChild(healthBarFill);
+
+  const healthIssues = document.createElement("div");
+  healthIssues.className = "health-issues";
+  healthIssues.textContent = "No health data yet.";
+
+  healthBlock.appendChild(healthSummary);
+  healthBlock.appendChild(healthBar);
+  healthBlock.appendChild(healthIssues);
+
   const progressTrack = document.createElement("div");
   progressTrack.className = "progress-track";
 
@@ -99,11 +126,23 @@ function renderManifestCard(manifest) {
     deleteManifest(manifest, {
       card,
       status,
-      buttons: [downloadBtn, deleteBtn],
+      buttons: [downloadBtn, deleteBtn, healthBtn],
+    });
+  });
+
+  healthBtn.addEventListener("click", () => {
+    checkManifestHealth(manifest, {
+      button: healthBtn,
+      status,
+      block: healthBlock,
+      summaryEl: healthSummary,
+      barFill: healthBarFill,
+      issuesEl: healthIssues,
     });
   });
 
   card.appendChild(actions);
+  card.appendChild(healthBlock);
   return card;
 }
 
@@ -209,6 +248,74 @@ async function deleteManifest(manifest, ui) {
       // eslint-disable-next-line no-param-reassign
       btn.disabled = false;
     });
+  }
+}
+
+async function checkManifestHealth(manifest, ui) {
+  ui.button.disabled = true;
+  ui.block.classList.remove("hidden");
+  ui.status.textContent = "Checking health...";
+  ui.summaryEl.textContent = "Running integrity checks...";
+  ui.barFill.style.width = "0%";
+  ui.issuesEl.textContent = "";
+
+  const params = new URLSearchParams({ manifest_id: manifest.id });
+
+  try {
+    const res = await fetch(`${MANIFEST_HEALTH_URL}?${params.toString()}`, {
+      headers: { "X-CSRFToken": csrf() },
+    });
+
+    if (!res.ok) {
+      const errTxt = await res.text();
+      throw new Error(errTxt || "Health check failed");
+    }
+
+    const data = await res.json();
+    const summary = data.summary || {};
+    const ok = summary.ok || 0;
+    const total = summary.total || 0;
+    const percent = total ? Math.round((ok / total) * 100) : 0;
+
+    ui.barFill.style.width = `${percent}%`;
+    ui.summaryEl.textContent = `${ok}/${total} chunks healthy (${percent}%)`;
+
+    const issues = (data.chunks || []).filter(chunk => chunk.status !== "ok");
+    if (!issues.length) {
+      ui.issuesEl.textContent = "All chunks verified.";
+    } else {
+      ui.issuesEl.textContent = "";
+      issues.forEach(issue => {
+        const pill = document.createElement("span");
+        pill.className = `chunk-pill ${issue.status || "error"}`;
+        const labelMap = {
+          missing: "Missing",
+          missing_metadata: "Metadata missing",
+          mismatch: "Hash mismatch",
+          error: "Error",
+        };
+        const label = labelMap[issue.status] || "Issue";
+        const indexLabel = Number.isFinite(issue.index) ? `Chunk ${issue.index}` : "Chunk";
+        pill.textContent = `${indexLabel}: ${label}`;
+        pill.title = [
+          issue.expected_md5 ? `Expected: ${issue.expected_md5}` : null,
+          issue.actual_md5 ? `Actual: ${issue.actual_md5}` : null,
+          issue.message || null,
+        ]
+          .filter(Boolean)
+          .join("\n");
+        ui.issuesEl.appendChild(pill);
+      });
+    }
+
+    ui.status.textContent = "Health check complete.";
+  } catch (error) {
+    console.error(error);
+    ui.status.textContent = `Health check failed: ${error.message}`;
+    ui.summaryEl.textContent = "Unable to compute health.";
+    ui.issuesEl.textContent = "Try again later.";
+  } finally {
+    ui.button.disabled = false;
   }
 }
 

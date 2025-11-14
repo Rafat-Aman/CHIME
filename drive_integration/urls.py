@@ -9,4 +9,5 @@ urlpatterns = [
     path("downloads/", views.downloads_view, name="downloads"),
     path("download-chunk/", views.download_chunk, name="download_chunk"),
     path("delete-manifest/", views.delete_manifest, name="delete_manifest"),
+    path("manifest-health/", views.manifest_health, name="manifest_health"),
 ]

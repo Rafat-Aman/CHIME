@@ -41,6 +41,31 @@ def _get_google_token_for(request, account_id=None):
     return token_obj.token, None
 
 
+def _token_for_account(request, account_id, cache):
+    if account_id in cache:
+        return cache[account_id], None
+    token, err = _get_google_token_for(request, account_id)
+    if err:
+        return None, err
+    cache[account_id] = token
+    return token, None
+
+
+def _fetch_drive_metadata(access_token, drive_file_id, fields="md5Checksum,size"):
+    url = f"https://www.googleapis.com/drive/v3/files/{drive_file_id}?fields={fields}"
+    headers = {"Authorization": f"Bearer {access_token}"}
+    try:
+        resp = requests.get(url, headers=headers, timeout=30)
+    except Exception as exc:
+        return None, 0, str(exc)
+
+    if resp.status_code == 200:
+        return resp.json(), 200, None
+    if resp.status_code == 404:
+        return None, 404, None
+    return None, resp.status_code, resp.text[:200]
+
+
 # --------------------------------------------------------------------
 # View: Upload page with Drive quotas
 # --------------------------------------------------------------------
@@ -192,13 +217,33 @@ def save_manifest(request):
     if not all(k in data for k in required):
         return JsonResponse({"error": "Missing manifest fields"}, status=400)
 
+    raw_chunks = data.get("chunks", [])
+    token_cache = {}
+    enriched_chunks = []
+    for chunk in raw_chunks:
+        chunk_copy = dict(chunk)
+        account_id = chunk.get("account_id")
+        drive_file_id = chunk.get("drive_file_id")
+        if account_id is not None and drive_file_id:
+            token, err = _token_for_account(request, account_id, token_cache)
+            if err:
+                return err
+            meta, status_code, _ = _fetch_drive_metadata(token, drive_file_id)
+            if status_code == 200 and meta:
+                chunk_copy["drive_md5"] = meta.get("md5Checksum")
+                try:
+                    chunk_copy["drive_size"] = int(meta.get("size", chunk.get("size", 0)) or 0)
+                except (TypeError, ValueError):
+                    chunk_copy["drive_size"] = chunk.get("size", 0)
+        enriched_chunks.append(chunk_copy)
+
     manifest = DriveManifest.objects.create(
         user=request.user,
         file_name=data.get("file_name"),
         total_size=int(data.get("total_size", 0)),
         chunk_size=int(data.get("chunk_size", 0)),
         total_chunks=int(data.get("total_chunks", 0)),
-        manifest_data=data.get("chunks", []),
+        manifest_data=enriched_chunks,
     )
     return JsonResponse({"message": "Manifest saved", "id": manifest.id})
 
@@ -297,15 +342,6 @@ def delete_manifest(request):
     chunks = manifest.manifest_data or []
     token_cache = {}
 
-    def token_for(account_id):
-        if account_id in token_cache:
-            return token_cache[account_id], None
-        token, err = _get_google_token_for(request, account_id)
-        if err:
-            return None, err
-        token_cache[account_id] = token
-        return token, None
-
     errors = []
     for chunk in chunks:
         drive_file_id = chunk.get("drive_file_id")
@@ -313,7 +349,7 @@ def delete_manifest(request):
         if not drive_file_id or account_id is None:
             continue
 
-        token, err = token_for(account_id)
+        token, err = _token_for_account(request, account_id, token_cache)
         if err:
             return err
 
@@ -339,3 +375,92 @@ def delete_manifest(request):
 
     manifest.delete()
     return JsonResponse({"message": "Manifest and chunks deleted"})
+
+
+# --------------------------------------------------------------------
+# API: Health check for manifest chunks
+# --------------------------------------------------------------------
+@login_required
+def manifest_health(request):
+    if request.method != "GET":
+        return JsonResponse({"error": "GET only"}, status=405)
+
+    manifest_id = request.GET.get("manifest_id")
+    if not manifest_id:
+        return JsonResponse({"error": "manifest_id is required"}, status=400)
+
+    manifest = get_object_or_404(DriveManifest, id=manifest_id, user=request.user)
+    chunks = manifest.manifest_data or []
+    token_cache = {}
+
+    results = []
+    summary = {
+        "total": len(chunks),
+        "ok": 0,
+        "mismatch": 0,
+        "missing": 0,
+        "error": 0,
+    }
+
+    for chunk in chunks:
+        idx = chunk.get("index")
+        account_id = chunk.get("account_id")
+        drive_file_id = chunk.get("drive_file_id")
+        expected = (chunk.get("drive_md5") or "").lower()
+
+        if account_id is None or not drive_file_id:
+            summary["missing"] += 1
+            results.append({
+                "index": idx,
+                "status": "missing_metadata",
+                "message": "Chunk metadata incomplete.",
+            })
+            continue
+        if not expected:
+            summary["missing"] += 1
+            results.append({
+                "index": idx,
+                "status": "missing_metadata",
+                "message": "No stored hash for this chunk.",
+            })
+            continue
+
+        token, err = _token_for_account(request, account_id, token_cache)
+        if err:
+            return err
+
+        meta, status_code, err_text = _fetch_drive_metadata(token, drive_file_id)
+        if status_code == 404:
+            summary["missing"] += 1
+            results.append({
+                "index": idx,
+                "status": "missing",
+                "message": "Google Drive file not found.",
+            })
+            continue
+        if status_code != 200 or not meta:
+            summary["error"] += 1
+            results.append({
+                "index": idx,
+                "status": "error",
+                "message": err_text or "Failed to fetch Drive metadata.",
+            })
+            continue
+
+        actual_md5 = (meta.get("md5Checksum") or "").lower()
+        status = "ok" if expected and actual_md5 and expected == actual_md5 else "mismatch"
+        if status == "ok":
+            summary["ok"] += 1
+        else:
+            summary["mismatch"] += 1
+        results.append({
+            "index": idx,
+            "status": status,
+            "expected_md5": expected or None,
+            "actual_md5": actual_md5 or None,
+        })
+
+    total = summary["total"] or 1
+    summary["percent_ok"] = round((summary.get("ok", 0) / total) * 100, 2)
+
+    return JsonResponse({"summary": summary, "chunks": results})
