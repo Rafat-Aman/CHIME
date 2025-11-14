@@ -32,6 +32,15 @@ async function hashBlob(blob) {
 
 let manifestListEl = null;
 let emptyStateEl = null;
+let downloadSelectedBtn = null;
+const manifestControllers = new Map();
+const manifestDataMap = new Map();
+const selectedManifests = new Set();
+
+function updateBulkDownloadState() {
+  if (!downloadSelectedBtn) return;
+  downloadSelectedBtn.disabled = selectedManifests.size === 0;
+}
 
 function handleEmptyState() {
   if (!manifestListEl || !emptyStateEl) return;
@@ -43,15 +52,34 @@ function handleEmptyState() {
     manifestListEl.classList.add("hidden");
     emptyStateEl.classList.remove("hidden");
   }
+  updateBulkDownloadState();
 }
 
 function renderManifestCard(manifest) {
   const card = document.createElement("div");
   card.className = "manifest-card";
 
+  const header = document.createElement("div");
+  header.className = "manifest-header";
+
+  const selectBox = document.createElement("input");
+  selectBox.type = "checkbox";
+  selectBox.className = "manifest-select";
+  selectBox.addEventListener("change", e => {
+    if (e.target.checked) {
+      selectedManifests.add(manifest.id);
+    } else {
+      selectedManifests.delete(manifest.id);
+    }
+    updateBulkDownloadState();
+  });
+
   const title = document.createElement("h2");
   title.textContent = manifest.file_name;
-  card.appendChild(title);
+
+  header.appendChild(selectBox);
+  header.appendChild(title);
+  card.appendChild(header);
 
   const meta = document.createElement("div");
   meta.className = "manifest-meta";
@@ -153,6 +181,15 @@ function renderManifestCard(manifest) {
 
   card.appendChild(actions);
   card.appendChild(healthBlock);
+
+  manifestControllers.set(manifest.id, {
+    card,
+    button: downloadBtn,
+    progressFill,
+    status,
+    selectBox,
+  });
+
   return card;
 }
 
@@ -280,6 +317,11 @@ async function deleteManifest(manifest, ui) {
 
     ui.status.textContent = "Deleted.";
     ui.card.remove();
+    selectedManifests.delete(manifest.id);
+    const controller = manifestControllers.get(manifest.id);
+    if (controller?.selectBox) controller.selectBox.checked = false;
+    manifestControllers.delete(manifest.id);
+    manifestDataMap.delete(manifest.id);
     handleEmptyState();
   } catch (error) {
     console.error(error);
@@ -364,6 +406,28 @@ document.addEventListener("DOMContentLoaded", () => {
   const manifests = script ? JSON.parse(script.textContent) : [];
   manifestListEl = document.getElementById("manifestList");
   emptyStateEl = document.getElementById("emptyState");
+  downloadSelectedBtn = document.getElementById("downloadSelected");
+
+  downloadSelectedBtn?.addEventListener("click", async () => {
+    if (!selectedManifests.size) return;
+    downloadSelectedBtn.disabled = true;
+    for (const id of Array.from(selectedManifests)) {
+      const manifest = manifestDataMap.get(id);
+      const controller = manifestControllers.get(id);
+      if (!manifest || !controller) continue;
+      try {
+        await downloadManifest(manifest, controller);
+      } catch (error) {
+        console.error("Batch download failed", error);
+      }
+    }
+    selectedManifests.clear();
+    manifestControllers.forEach(ctrl => {
+      if (ctrl.selectBox) ctrl.selectBox.checked = false;
+    });
+    downloadSelectedBtn.disabled = false;
+    updateBulkDownloadState();
+  });
 
   if (!manifests.length) {
     handleEmptyState();
@@ -373,6 +437,7 @@ document.addEventListener("DOMContentLoaded", () => {
   manifestListEl.classList.remove("hidden");
   emptyStateEl.classList.add("hidden");
   manifests.forEach(manifest => {
+    manifestDataMap.set(manifest.id, manifest);
     manifestListEl.appendChild(renderManifestCard(manifest));
   });
 });

@@ -30,6 +30,17 @@
   background-color: #fff;
 }
 
+.manifest-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.manifest-select {
+  width: 18px;
+  height: 18px;
+}
+
 .manifest-meta {
   display: flex;
   flex-wrap: wrap;

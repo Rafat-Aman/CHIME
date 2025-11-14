@@ -1,5 +1,5 @@
 // ------------------------------
-// upload.js - final uploader
+// upload.js - multi-file uploader with global distribution
 // ------------------------------
 
 function csrf() {
@@ -14,14 +14,50 @@ function csrf() {
 const toMB = b => (b / (1024 * 1024)).toFixed(1);
 
 let file = null;
-let fileSize = 0;
-let chunkSizeMB = 500;
-let chunkSizeBytes = 500 * 1024 * 1024;
-let totalChunks = 0;
-let fileChecksum = "";
-let fileChecksumPromise = null;
-let fileChecksumContext = 0;
+let chunkSizeMB = parseInt(document.getElementById("chunkSize").value, 10) || 500;
+let chunkSizeBytes = chunkSizeMB * 1024 * 1024;
+
 const fileChecksumEl = document.getElementById("file-checksum");
+const fileListWrapper = document.getElementById("selected-files-wrapper");
+const fileListEl = document.getElementById("selectedFilesList");
+const accountBlocks = Array.from(document.querySelectorAll(".account-block"));
+
+const distributionShares = {};
+let distributionInitialized = false;
+
+const fileEntries = [];
+let activeFileIndex = -1;
+
+function checksum(blob) {
+  return blob.arrayBuffer()
+    .then(buf => crypto.subtle.digest("SHA-256", buf))
+    .then(digest => Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join(""));
+}
+
+function parseRemainingMB(s) {
+  if (!s) return 0;
+  const trimmed = String(s).trim();
+  const match = trimmed.match(/([\d.]+)\s*(GB|MB)?/i);
+  if (!match) return 0;
+  const val = parseFloat(match[1]);
+  const unit = (match[2] || "MB").toUpperCase();
+  return unit === "GB" ? val * 1024 : val;
+}
+
+function initDistributionShares() {
+  if (!accountBlocks.length) return;
+  const even = 1 / accountBlocks.length;
+  accountBlocks.forEach(block => {
+    distributionShares[block.dataset.id] = even;
+  });
+}
+
+initDistributionShares();
+
+function getActiveEntry() {
+  if (activeFileIndex < 0 || activeFileIndex >= fileEntries.length) return null;
+  return fileEntries[activeFileIndex];
+}
 
 function renderFileChecksumDisplay(message) {
   if (!fileChecksumEl) return;
@@ -29,173 +65,346 @@ function renderFileChecksumDisplay(message) {
     fileChecksumEl.textContent = message;
     return;
   }
-  if (fileChecksum) {
-    fileChecksumEl.textContent = fileChecksum;
-  } else if (fileChecksumPromise) {
+  const entry = getActiveEntry();
+  if (!entry) {
+    fileChecksumEl.textContent = "N/A";
+    return;
+  }
+  if (entry.checksum) {
+    fileChecksumEl.textContent = entry.checksum;
+  } else if (entry.checksumPromise) {
     fileChecksumEl.textContent = "Computing...";
   } else {
     fileChecksumEl.textContent = "N/A";
   }
 }
 
-function startFileChecksum() {
-  if (!file) {
-    fileChecksum = "";
+function updateFileInfo() {
+  const info = document.getElementById("file-info");
+  const entry = getActiveEntry();
+  if (!info || !entry) {
+    document.getElementById("file-size").textContent = "0 MB";
+    document.getElementById("total-chunks").textContent = "0";
+    info?.classList.add("hidden");
     renderFileChecksumDisplay();
-    return null;
+    return;
   }
-  if (fileChecksumPromise) return fileChecksumPromise;
-  const context = fileChecksumContext;
-  const promise = checksum(file)
+  info.classList.remove("hidden");
+  document.getElementById("file-size").textContent = `${toMB(entry.file.size)} MB`;
+  const required = Math.max(1, Math.ceil(entry.file.size / chunkSizeBytes));
+  document.getElementById("total-chunks").textContent = required;
+  renderFileChecksumDisplay();
+}
+
+function renderFileList() {
+  if (!fileListWrapper || !fileListEl) return;
+  if (!fileEntries.length) {
+    fileListWrapper.classList.add("hidden");
+    fileListEl.innerHTML = "";
+    return;
+  }
+  fileListWrapper.classList.remove("hidden");
+  fileListEl.innerHTML = "";
+  fileEntries.forEach((entry, idx) => {
+    const li = document.createElement("li");
+    li.textContent = `${entry.file.name} (${toMB(entry.file.size)} MB)`;
+    if (idx === activeFileIndex) li.classList.add("active");
+    li.addEventListener("click", () => setActiveFile(idx));
+    fileListEl.appendChild(li);
+  });
+}
+
+function startEntryChecksum(entry) {
+  if (!entry || entry.checksum || entry.checksumPromise) {
+    renderFileChecksumDisplay();
+    return entry?.checksumPromise || null;
+  }
+  const context = (entry.checksumContext || 0) + 1;
+  entry.checksumContext = context;
+  entry.checksumPromise = checksum(entry.file)
     .then(hash => {
-      if (context !== fileChecksumContext) return hash;
-      fileChecksum = hash;
-      renderFileChecksumDisplay();
+      if (entry.checksumContext === context) {
+        entry.checksum = hash;
+        if (entry === getActiveEntry()) renderFileChecksumDisplay();
+      }
       return hash;
     })
     .catch(err => {
       console.error("File checksum failed", err);
-      if (context === fileChecksumContext) {
-        fileChecksum = "";
-        renderFileChecksumDisplay("Checksum failed");
+      if (entry.checksumContext === context) {
+        entry.checksum = "";
+        if (entry === getActiveEntry()) renderFileChecksumDisplay("Checksum failed");
       }
       return "";
     })
     .finally(() => {
-      if (fileChecksumContext === context && fileChecksumPromise === promise) {
-        fileChecksumPromise = null;
-        if (!fileChecksum) {
+      if (entry.checksumContext === context) {
+        entry.checksumPromise = null;
+        if (entry === getActiveEntry() && !entry.checksum) {
           renderFileChecksumDisplay();
         }
       }
     });
-  fileChecksumPromise = promise;
   renderFileChecksumDisplay();
-  return promise;
+  return entry.checksumPromise;
 }
 
-async function ensureFileChecksum() {
-  if (fileChecksum) return fileChecksum;
-  if (!file) return "";
-  if (!fileChecksumPromise) {
-    startFileChecksum();
-  }
-  if (fileChecksumPromise) {
+async function ensureEntryChecksum(entry) {
+  if (!entry) return "";
+  if (entry.checksum) return entry.checksum;
+  if (!entry.checksumPromise) startEntryChecksum(entry);
+  if (entry.checksumPromise) {
     try {
-      await fileChecksumPromise;
+      await entry.checksumPromise;
     } catch (err) {
       console.error("Checksum promise failed", err);
     }
   }
-  return fileChecksum;
+  return entry.checksum || "";
 }
 
-function updateFileInfo() {
-  document.getElementById("file-info").classList.remove("hidden");
-  document.getElementById("file-size").textContent = `${toMB(fileSize)} MB`;
-  document.getElementById("total-chunks").textContent = totalChunks;
-  renderFileChecksumDisplay();
+function getAccountCapacity(accountId) {
+  const block = document.querySelector(`.account-block[data-id="${accountId}"]`);
+  if (!block || !chunkSizeMB) return 0;
+  const remainingMB = parseRemainingMB(block.dataset.remaining);
+  return Math.max(0, Math.floor(remainingMB / chunkSizeMB));
 }
 
-function parseRemainingMB(s) {
-  if (!s) return 0;
-  s = String(s).trim();
-  const m = s.match(/([\d.]+)\s*(GB|MB)?/i);
-  if (!m) return 0;
-  const val = parseFloat(m[1]);
-  const unit = (m[2] || "MB").toUpperCase();
-  return unit === "GB" ? val * 1024 : val;
-}
-
-function updateSliders() {
-  const sliders = document.querySelectorAll(".chunk-slider");
-  sliders.forEach(sl => {
-    const accBlock = sl.closest(".account-block");
-    const remainingMB = parseRemainingMB(accBlock.dataset.remaining);
-    const maxChunks = Math.max(0, Math.floor(remainingMB / chunkSizeMB));
-    sl.max = Math.min(maxChunks, totalChunks);
-    accBlock.querySelector(".acc-max").textContent = sl.max;
-    if (parseInt(sl.value) > sl.max) sl.value = sl.max;
-    sl.dispatchEvent(new Event("input"));
+function normalizeShares() {
+  let sum = 0;
+  accountBlocks.forEach(block => {
+    const id = block.dataset.id;
+    sum += distributionShares[id] || 0;
   });
-  validateTotals();
-}
-
-document.getElementById("fileInput").addEventListener("change", async e => {
-  file = e.target.files[0];
-  fileChecksumContext += 1;
-  fileChecksumPromise = null;
-  fileChecksum = "";
-  renderFileChecksumDisplay();
-  if (!file) {
-    fileSize = 0;
-    totalChunks = 0;
+  if (sum <= 0) {
+    initDistributionShares();
     return;
   }
-  fileSize = file.size;
-  chunkSizeMB = parseInt(document.getElementById("chunkSize").value);
-  chunkSizeBytes = chunkSizeMB * 1024 * 1024;
-  totalChunks = Math.ceil(fileSize / chunkSizeBytes);
+  accountBlocks.forEach(block => {
+    const id = block.dataset.id;
+    distributionShares[id] = (distributionShares[id] || 0) / sum;
+  });
+}
+
+function recordShareSnapshot(requiredChunks) {
+  if (!requiredChunks) return;
+  accountBlocks.forEach(block => {
+    const slider = block.querySelector(".chunk-slider");
+    const value = parseInt(slider.value, 10) || 0;
+    distributionShares[block.dataset.id] = value / requiredChunks;
+  });
+  normalizeShares();
+}
+
+function allocateChunksForTotal(totalChunks) {
+  if (!totalChunks) {
+    return { allocations: {}, remainder: 0 };
+  }
+  const accounts = accountBlocks.map(block => {
+    const id = block.dataset.id;
+    return {
+      id,
+      share: distributionShares[id] || 0,
+      capacity: getAccountCapacity(id),
+    };
+  });
+
+  const available = accounts.filter(acc => acc.capacity > 0);
+  if (!available.length) {
+    return { allocations: {}, remainder: totalChunks };
+  }
+
+  let shareSum = available.reduce((sum, acc) => sum + acc.share, 0);
+  if (shareSum <= 0) {
+    available.forEach(acc => {
+      acc.share = 1 / available.length;
+    });
+    shareSum = 1;
+  } else {
+    available.forEach(acc => {
+      acc.share /= shareSum;
+    });
+  }
+
+  const allocations = {};
+  let remaining = totalChunks;
+  available.forEach(acc => {
+    const target = acc.share * totalChunks;
+    const base = Math.min(acc.capacity, Math.floor(target));
+    allocations[acc.id] = base;
+    acc.target = target;
+    acc.frac = target - Math.floor(target);
+    remaining -= base;
+  });
+
+  const sorted = [...available].sort((a, b) => b.frac - a.frac);
+  while (remaining > 0) {
+    let assigned = false;
+    for (const acc of sorted) {
+      if (remaining === 0) break;
+      if ((allocations[acc.id] || 0) < acc.capacity) {
+        allocations[acc.id] = (allocations[acc.id] || 0) + 1;
+        remaining -= 1;
+        assigned = true;
+      }
+    }
+    if (!assigned) break;
+  }
+
+  return { allocations, remainder: remaining };
+}
+
+function updateSliderBounds(entry) {
+  const required = entry ? Math.max(1, Math.ceil(entry.file.size / chunkSizeBytes)) : 0;
+  accountBlocks.forEach(block => {
+    const slider = block.querySelector(".chunk-slider");
+    const maxLabel = block.querySelector(".acc-max");
+    const capacity = getAccountCapacity(block.dataset.id);
+    const max = entry ? Math.min(capacity, required) : 0;
+    slider.max = max;
+    if (maxLabel) maxLabel.textContent = max;
+  });
+}
+
+function applyDistributionToSliders() {
+  const entry = getActiveEntry();
+  if (!entry) {
+    updateSliderBounds(null);
+    accountBlocks.forEach(block => {
+      const slider = block.querySelector(".chunk-slider");
+      slider.value = 0;
+      const tooltip = block.querySelector(".tooltip");
+      if (tooltip) tooltip.textContent = "0";
+      block.querySelector(".slider-value").textContent = "0 chunks";
+    });
+    validateTotals();
+    return;
+  }
+  updateSliderBounds(entry);
+  const required = Math.max(1, Math.ceil(entry.file.size / chunkSizeBytes));
+  const { allocations, remainder } = allocateChunksForTotal(required);
+  accountBlocks.forEach(block => {
+    const slider = block.querySelector(".chunk-slider");
+    const value = allocations[block.dataset.id] || 0;
+    slider.value = value;
+    const tooltip = block.querySelector(".tooltip");
+    if (tooltip) tooltip.textContent = value;
+    block.querySelector(".slider-value").textContent = `${value} chunks`;
+  });
+  if (distributionInitialized) {
+    recordShareSnapshot(required);
+  }
+  validateTotals(remainder);
+}
+
+function setActiveFile(index) {
+  if (!fileEntries.length) {
+    activeFileIndex = -1;
+    file = null;
+    updateFileInfo();
+    renderFileList();
+    applyDistributionToSliders();
+    return;
+  }
+  const clamped = Math.min(Math.max(index, 0), fileEntries.length - 1);
+  activeFileIndex = clamped;
+  file = fileEntries[clamped].file;
   updateFileInfo();
-  updateSliders();
-  startFileChecksum();
+  renderFileList();
+  applyDistributionToSliders();
+  startEntryChecksum(fileEntries[clamped]);
+}
+
+function setSelectedFiles(fileList) {
+  fileEntries.length = 0;
+  Array.from(fileList || []).forEach(f => {
+    fileEntries.push({
+      file: f,
+      checksum: "",
+      checksumPromise: null,
+      checksumContext: 0,
+    });
+  });
+  distributionInitialized = false;
+  if (fileEntries.length) {
+    setActiveFile(0);
+  } else {
+    setActiveFile(-1);
+  }
+}
+
+function validateTotals(forceRemainder) {
+  const warn = document.getElementById("total-warning");
+  const btn = document.getElementById("uploadBtn");
+  const entry = getActiveEntry();
+  if (!entry) {
+    warn.textContent = "Select at least one file to configure uploads.";
+    warn.classList.remove("hidden");
+    btn.disabled = true;
+    return;
+  }
+  const required = Math.max(1, Math.ceil(entry.file.size / chunkSizeBytes));
+  let sum = 0;
+  accountBlocks.forEach(block => {
+    const slider = block.querySelector(".chunk-slider");
+    sum += parseInt(slider.value, 10) || 0;
+  });
+  if (sum !== required) {
+    warn.textContent = `Total assigned chunks must equal ${required} (currently ${sum}).`;
+    warn.classList.remove("hidden");
+    btn.disabled = true;
+    return;
+  }
+  const remainder = typeof forceRemainder === "number"
+    ? forceRemainder
+    : allocateChunksForTotal(required).remainder;
+  if (remainder > 0) {
+    warn.textContent = "Insufficient available Drive space to cover this file.";
+    warn.classList.remove("hidden");
+    btn.disabled = true;
+    return;
+  }
+  warn.classList.add("hidden");
+  btn.disabled = false;
+}
+
+document.getElementById("fileInput").addEventListener("change", e => {
+  setSelectedFiles(e.target.files);
 });
 
 document.getElementById("chunkSize").addEventListener("input", e => {
-  if (!file) return;
-  const oldTotal = totalChunks;
-  chunkSizeMB = parseInt(e.target.value);
+  const next = parseInt(e.target.value, 10);
+  if (Number.isNaN(next) || next <= 0) return;
+  chunkSizeMB = next;
   chunkSizeBytes = chunkSizeMB * 1024 * 1024;
-  totalChunks = Math.ceil(fileSize / chunkSizeBytes);
-  const ratio = totalChunks / (oldTotal || 1);
-  document.querySelectorAll(".chunk-slider").forEach(sl => {
-    const val = parseInt(sl.value);
-    const newVal = Math.round(val * ratio);
-    sl.value = Math.min(newVal, parseInt(sl.max));
-    sl.dispatchEvent(new Event("input"));
-  });
   updateFileInfo();
-  updateSliders();
+  applyDistributionToSliders();
 });
 
 document.querySelectorAll(".chunk-slider").forEach(sl => {
-  const tooltip = sl.parentNode.querySelector(".tooltip");
+  const tooltip = sl.parentElement.querySelector(".tooltip");
   sl.addEventListener("input", e => {
-    const val = parseInt(e.target.value);
-    tooltip.textContent = val;
-    sl.closest(".account-block").querySelector(".slider-value").textContent = `${val} chunks`;
+    const entry = getActiveEntry();
+    if (!entry) return;
+    const val = parseInt(e.target.value, 10) || 0;
+    if (tooltip) tooltip.textContent = val;
+    const valueLabel = e.target.closest(".account-block").querySelector(".slider-value");
+    if (valueLabel) valueLabel.textContent = `${val} chunks`;
+    const required = Math.max(1, Math.ceil(entry.file.size / chunkSizeBytes));
+    distributionInitialized = true;
+    recordShareSnapshot(required);
     validateTotals();
   });
   sl.addEventListener("mousemove", e => {
+    if (!tooltip) return;
     const rect = sl.getBoundingClientRect();
     tooltip.style.left = `${e.clientX - rect.left}px`;
   });
-  sl.addEventListener("mouseenter", () => tooltip.classList.remove("hidden"));
-  sl.addEventListener("mouseleave", () => tooltip.classList.add("hidden"));
+  sl.addEventListener("mouseenter", () => tooltip?.classList.remove("hidden"));
+  sl.addEventListener("mouseleave", () => tooltip?.classList.add("hidden"));
 });
 
-function validateTotals() {
-  let sum = 0;
-  document.querySelectorAll(".chunk-slider").forEach(s => sum += parseInt(s.value));
-  const warn = document.getElementById("total-warning");
-  const btn = document.getElementById("uploadBtn");
-  if (sum !== totalChunks) {
-    warn.textContent = `Total assigned chunks must equal ${totalChunks} (currently ${sum}).`;
-    warn.classList.remove("hidden");
-    btn.disabled = true;
-  } else {
-    warn.classList.add("hidden");
-    btn.disabled = false;
-  }
-}
-
-async function checksum(blob) {
-  const buf = await blob.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buf);
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
-}
-
-function createProgressBar(label) {
+function createProgressBar(label, parent) {
   const block = document.createElement("div");
   block.className = "progress-item";
   block.innerHTML = `
@@ -204,155 +413,191 @@ function createProgressBar(label) {
     <div class="progress-text">0 MB / 0 MB</div>
     <button class="retry hidden">Retry</button>
     <div class="checkmark hidden">✓</div>`;
-  document.getElementById("progressContainer").appendChild(block);
+  parent.appendChild(block);
   return block;
 }
+
 function updateBar(block, uploaded, total) {
   const bar = block.querySelector(".progress-inner");
-  const pct = Math.min(100, (uploaded / total) * 100);
-  bar.style.width = pct + "%";
+  const pct = total ? Math.min(100, (uploaded / total) * 100) : 0;
+  bar.style.width = `${pct}%`;
   block.querySelector(".progress-text").textContent = `${toMB(uploaded)} / ${toMB(total)} MB`;
 }
 
 document.getElementById("uploadBtn").addEventListener("click", async () => {
-  if (!file) return;
-  const overallChecksum = await ensureFileChecksum();
-  if (!overallChecksum) {
-    alert("Unable to compute the file checksum. Please reselect the file and try again.");
-    return;
-  }
-  const chunkSize = chunkSizeMB * 1024 * 1024;
-  const totalChunksLocal = Math.ceil(file.size / chunkSize);
-  const manifest = [];
+  if (!fileEntries.length) return;
   const container = document.getElementById("progressContainer");
   container.innerHTML = "";
 
-  let chunkIndex = 0;
+  for (const entry of fileEntries) {
+    const currentFile = entry.file;
+    const chunkSize = chunkSizeBytes;
+    const totalChunksLocal = Math.max(1, Math.ceil(currentFile.size / chunkSize));
+    const { allocations, remainder } = allocateChunksForTotal(totalChunksLocal);
 
-  for (const acc of document.querySelectorAll(".account-block")) {
-    const chunksForAcc = parseInt(acc.querySelector(".chunk-slider").value);
-    const accountId = acc.dataset.id;
-    if (!chunksForAcc) continue;
+    const fileSection = document.createElement("div");
+    fileSection.className = "file-progress";
+    fileSection.innerHTML = `<h3>${currentFile.name}</h3>`;
+    container.appendChild(fileSection);
 
-    const progressBlock = createProgressBar(acc.querySelector(".acc-email").textContent);
-    let uploadedBytes = 0;
-    const totalUploadBytes = Math.min(file.size - (chunkIndex * chunkSize), chunksForAcc * chunkSize);
-
-    for (let i = 0; i < chunksForAcc; i++) {
-      const start = chunkIndex * chunkSize;
-      const end = Math.min(start + chunkSize, file.size);
-      const blob = file.slice(start, end);
-
-      let hash = "";
-      try {
-        hash = await checksum(blob);
-      } catch (e) {
-        console.error("Checksum failed", e);
-      }
-
-      const createRes = await fetch(CREATE_SESSION_URL, {
-        method: "POST",
-        headers: {"Content-Type": "application/json", "X-CSRFToken": csrf()},
-        body: JSON.stringify({
-          file_name: file.name,
-          mime_type: file.type || "application/octet-stream",
-          account_id: accountId,
-          chunk_index: chunkIndex
-        }),
-      });
-
-      if (!createRes.ok) {
-        const txt = await createRes.text();
-        progressBlock.querySelector(".retry").classList.remove("hidden");
-        progressBlock.querySelector(".progress-inner").style.background = "#f55";
-        console.error("Create session failed", txt);
-        return;
-      }
-
-      const createData = await createRes.json();
-      const upload_url = createData.upload_url;
-      if (!upload_url) {
-        console.error("No upload_url from server", createData);
-        return;
-      }
-
-      const qs = new URLSearchParams({
-        upload_url,
-        account_id: accountId,
-        start: 0,
-        end: (blob.size - 1),
-        mime: file.type || "application/octet-stream"
-      });
-
-      const putRes = await fetch(`${PROXY_CHUNK_URL}?${qs.toString()}`, {
-        method: "POST",
-        headers: {"X-CSRFToken": csrf()},
-        body: blob
-      });
-
-      if (putRes.status === 200 || putRes.status === 201) {
-        let driveFileId = null;
-        try {
-          const text = await putRes.text();
-          const parsed = JSON.parse(text || "{}");
-          driveFileId = parsed.id || null;
-        } catch (e) {
-          console.warn("Failed to parse drive response JSON", e);
-        }
-
-        uploadedBytes += blob.size;
-        updateBar(progressBlock, uploadedBytes, totalUploadBytes);
-
-        manifest.push({
-          index: chunkIndex,
-          account_id: parseInt(accountId),
-          drive_file_id: driveFileId,
-          size: blob.size,
-          checksum: hash,
-          uploaded_at: new Date().toISOString()
-        });
-
-        chunkIndex++;
-        continue;
-      }
-
-      if (putRes.status === 308) {
-        uploadedBytes += blob.size;
-        updateBar(progressBlock, uploadedBytes, totalUploadBytes);
-        chunkIndex++;
-        continue;
-      }
-
-      console.error("Chunk upload failed", putRes.status, await putRes.text());
-      progressBlock.querySelector(".retry").classList.remove("hidden");
-      progressBlock.querySelector(".progress-inner").style.background = "#f55";
-      return;
+    if (remainder > 0) {
+      const warn = document.createElement("div");
+      warn.textContent = "Skipped — insufficient Drive space for this distribution.";
+      fileSection.appendChild(warn);
+      continue;
     }
 
-    progressBlock.querySelector(".checkmark").classList.remove("hidden");
+    const overallChecksum = await ensureEntryChecksum(entry);
+    if (!overallChecksum) {
+      const warn = document.createElement("div");
+      warn.textContent = "Skipped — unable to compute file checksum.";
+      fileSection.appendChild(warn);
+      continue;
+    }
+
+    const manifest = [];
+    let chunkIndex = 0;
+    let aborted = false;
+
+    for (const block of accountBlocks) {
+      const accountId = block.dataset.id;
+      const chunksForAcc = allocations[accountId] || 0;
+      if (!chunksForAcc) continue;
+
+      const progressBlock = createProgressBar(block.querySelector(".acc-email").textContent, fileSection);
+      let uploadedBytes = 0;
+      const totalUploadBytes = Math.min(
+        currentFile.size - chunkIndex * chunkSize,
+        chunksForAcc * chunkSize,
+      );
+
+      for (let i = 0; i < chunksForAcc; i += 1) {
+        const start = chunkIndex * chunkSize;
+        const end = Math.min(start + chunkSize, currentFile.size);
+        const blob = currentFile.slice(start, end);
+
+        let hash = "";
+        try {
+          hash = await checksum(blob);
+        } catch (err) {
+          console.error("Chunk checksum failed", err);
+        }
+
+        const createRes = await fetch(CREATE_SESSION_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+          body: JSON.stringify({
+            file_name: currentFile.name,
+            mime_type: currentFile.type || "application/octet-stream",
+            account_id: accountId,
+            chunk_index: chunkIndex,
+          }),
+        });
+
+        if (!createRes.ok) {
+          progressBlock.querySelector(".retry").classList.remove("hidden");
+          progressBlock.querySelector(".progress-inner").style.background = "#f55";
+          console.error("Create session failed", await createRes.text());
+          aborted = true;
+          break;
+        }
+
+        const createData = await createRes.json();
+        const uploadUrl = createData.upload_url;
+        if (!uploadUrl) {
+          console.error("No upload_url from server", createData);
+          aborted = true;
+          break;
+        }
+
+        const qs = new URLSearchParams({
+          upload_url: uploadUrl,
+          account_id: accountId,
+          start: 0,
+          end: blob.size - 1,
+          mime: currentFile.type || "application/octet-stream",
+        });
+
+        const putRes = await fetch(`${PROXY_CHUNK_URL}?${qs.toString()}`, {
+          method: "POST",
+          headers: { "X-CSRFToken": csrf() },
+          body: blob,
+        });
+
+        if (putRes.status === 200 || putRes.status === 201) {
+          let driveFileId = null;
+          try {
+            const text = await putRes.text();
+            driveFileId = JSON.parse(text || "{}").id || null;
+          } catch (err) {
+            console.warn("Failed to parse drive response JSON", err);
+          }
+
+          uploadedBytes += blob.size;
+          updateBar(progressBlock, uploadedBytes, totalUploadBytes);
+
+          manifest.push({
+            index: chunkIndex,
+            account_id: parseInt(accountId, 10),
+            drive_file_id: driveFileId,
+            size: blob.size,
+            checksum: hash,
+            uploaded_at: new Date().toISOString(),
+          });
+
+          chunkIndex += 1;
+          continue;
+        }
+
+        if (putRes.status === 308) {
+          uploadedBytes += blob.size;
+          updateBar(progressBlock, uploadedBytes, totalUploadBytes);
+          chunkIndex += 1;
+          continue;
+        }
+
+        console.error("Chunk upload failed", putRes.status, await putRes.text());
+        progressBlock.querySelector(".retry").classList.remove("hidden");
+        progressBlock.querySelector(".progress-inner").style.background = "#f55";
+        aborted = true;
+        break;
+      }
+
+      if (aborted) break;
+      progressBlock.querySelector(".checkmark").classList.remove("hidden");
+    }
+
+    if (aborted) {
+      const note = document.createElement("div");
+      note.textContent = "Upload aborted due to an error.";
+      fileSection.appendChild(note);
+      continue;
+    }
+
+    const saveRes = await fetch(SAVE_MANIFEST_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": csrf() },
+      body: JSON.stringify({
+        file_name: currentFile.name,
+        total_size: currentFile.size,
+        chunk_size: chunkSizeBytes,
+        total_chunks: totalChunksLocal,
+        file_checksum: overallChecksum,
+        chunks: manifest,
+      }),
+    });
+
+    if (!saveRes.ok) {
+      const failNote = document.createElement("div");
+      failNote.textContent = "Failed to save manifest.";
+      fileSection.appendChild(failNote);
+      console.error("Saving manifest failed", await saveRes.text());
+      continue;
+    }
+
+    const saved = await saveRes.json();
+    const done = document.createElement("div");
+    done.textContent = `Upload complete — manifest saved (ID ${saved.id}).`;
+    fileSection.appendChild(done);
   }
-
-  const saveRes = await fetch(SAVE_MANIFEST_URL, {
-    method: "POST",
-    headers: {"Content-Type": "application/json", "X-CSRFToken": csrf()},
-    body: JSON.stringify({
-      file_name: file.name,
-      total_size: file.size,
-      chunk_size: chunkSize,
-      total_chunks: totalChunksLocal,
-      file_checksum: overallChecksum,
-      chunks: manifest
-    })
-  });
-
-  if (!saveRes.ok) {
-    console.error("Saving manifest failed", await saveRes.text());
-    return;
-  }
-
-  const saved = await saveRes.json();
-  console.log("Manifest saved", saved);
-  const done = document.createElement("div");
-  done.textContent = "Upload complete — manifest saved.";
-  document.getElementById("progressContainer").appendChild(done);
 });

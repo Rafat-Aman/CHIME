@@ -19,8 +19,14 @@
     </div>
 
     <div class="config-row">
-      <label for="fileInput">Select file:</label>
-      <input type="file" id="fileInput">
+      <label for="fileInput">Select files:</label>
+      <input type="file" id="fileInput" multiple>
+    </div>
+
+    <div id="selected-files-wrapper" class="selected-files hidden">
+      <h4>Files queued</h4>
+      <ul id="selectedFilesList"></ul>
+      <p class="hint">Select a file in this list to adjust how its chunks are distributed across your accounts.</p>
     </div>
 
     <div class="config-row">

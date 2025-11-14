@@ -267,6 +267,61 @@ button:disabled {
   box-shadow: none;
 }
 
+.selected-files {
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  padding: 15px 18px;
+  margin-bottom: 16px;
+  background: #fdfdff;
+}
+
+.selected-files h4 {
+  margin-bottom: 10px;
+  font-size: 15px;
+  color: #212529;
+}
+
+.selected-files ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.selected-files li {
+  font-size: 13px;
+  padding: 8px 10px;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.selected-files li:hover {
+  background: #f1f5ff;
+}
+
+.selected-files li.active {
+  border-color: #007bff;
+  background: #e7f1ff;
+  font-weight: 600;
+}
+
+.file-progress {
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 20px;
+  background: #fff;
+}
+
+.file-progress h3 {
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
 /* ---- Progress Bars (JS-Generated) ---- */
 #progressContainer {
   margin-top: 25px;
