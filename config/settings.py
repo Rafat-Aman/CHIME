@@ -1,4 +1,3 @@
-# config/settings.py
 from pathlib import Path
 import environ
 
@@ -51,7 +50,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "allauth.account.middleware.AccountMiddleware",  # <-- required by allauth
+    "allauth.account.middleware.AccountMiddleware",  # required by allauth
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -115,29 +114,43 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # === Redirects & auth URLs ===
-LOGIN_REDIRECT_URL = "account_dashboard"
-LOGOUT_REDIRECT_URL = "home"
-LOGIN_URL = "account_login"  # allauth login view
+LOGIN_REDIRECT_URL = "/"             # redirect to homepage after login
+LOGOUT_REDIRECT_URL = "/"            # redirect to homepage after logout
+LOGIN_URL = "account_login"          # allauth login view
 
-# === Email (dev) ===
+# === Email (development) ===
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # === allauth options ===
-ACCOUNT_SIGNUP_FIELDS = ["username*", "email*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "none"         # consider "mandatory" in prod
-ACCOUNT_LOGIN_METHODS = {"email", "username"}
-SOCIALACCOUNT_STORE_TOKENS = True           # store access/refresh tokens
+ACCOUNT_EMAIL_REQUIRED = True
+ACCOUNT_USERNAME_REQUIRED = False
+ACCOUNT_EMAIL_VERIFICATION = "none"  # "mandatory" for production
+ACCOUNT_AUTHENTICATION_METHOD = "email"
+ACCOUNT_UNIQUE_EMAIL = True
+ACCOUNT_SIGNUP_REDIRECT_URL = "/"    # ensure users return to home if signup occurs
+ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+
+# === Social account settings ===
+SOCIALACCOUNT_STORE_TOKENS = True
+SOCIALACCOUNT_AUTO_SIGNUP = True     # <--- automatically create user after Google login
+SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
 
 # Google: request refresh tokens & force consent (first time)
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": [
             "openid", "email", "profile",
-            "https://www.googleapis.com/auth/drive.metadata.readonly"  # NEW
+            "https://www.googleapis.com/auth/drive.metadata.readonly"
         ],
         "AUTH_PARAMS": {"access_type": "offline", "prompt": "consent"},
     }
 }
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SOCIALACCOUNT_ADAPTER = "core.adapters.SocialAccountAdapter"
 
+# === OAuth Redirect URI ===
+SOCIAL_AUTH_GOOGLE_OAUTH2_REDIRECT_URI = "http://127.0.0.1:8000/accounts/google/login/callback/"
+
+# === Session handling ===
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# === Custom adapter (optional, ensure it exists) ===
+SOCIALACCOUNT_ADAPTER = "core.adapters.SocialAccountAdapter"
