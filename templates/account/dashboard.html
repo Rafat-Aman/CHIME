@@ -9,7 +9,10 @@
     <div class="page-actions">
       <a class="btn-outline" href="{% url 'home' %}">Home</a>
       <a class="btn-outline" href="{% url 'profile' %}">Profile</a>
-
+      <a class="btn-outline" href="{% url 'uploads' %}">Uploads</a>
+      <a class="btn btn-google" href="{% provider_login_url 'google' process='connect' %}">
+        <span class="g-icon"></span> Connect another Google account
+      </a>
     </div>
   </div>
 

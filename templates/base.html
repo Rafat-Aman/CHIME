@@ -1,10 +1,22 @@
-{% load static %}
+{% load static socialaccount %}
 <!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
   <title>{% block title %}CHIME{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script>
+    (function () {
+      try {
+        const stored = localStorage.getItem("chime-theme");
+        const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+        const theme = stored || (prefersDark ? "dark" : "light");
+        document.documentElement.dataset.theme = theme;
+      } catch (e) {
+        document.documentElement.dataset.theme = "dark";
+      }
+    })();
+  </script>
   <link href="{% static 'css/site.css' %}" rel="stylesheet" />
   {% block head %}{% endblock %}
 </head>
@@ -16,12 +28,12 @@
         <a class="nav-link{% if request.resolver_match.url_name == 'home' %} active{% endif %}" href="{% url 'home' %}">Home</a>
 
         {% if request.user.is_authenticated %}
-          <a class="nav-link{% if request.resolver_match.url_name == 'dashboard' %} active{% endif %}" href="{% url 'account_dashboard' %}">Dashboard</a>
+          <a class="nav-link{% if request.resolver_match.url_name == 'dashboard' %} active{% endif %}" href="{% url 'dashboard' %}">Dashboard</a>
           <a class="nav-link{% if request.resolver_match.url_name == 'profile' %} active{% endif %}" href="{% url 'profile' %}">Profile</a>
           <a class="btn-outline" href="{% url 'account_logout' %}">Logout</a>
         {% else %}
           <a class="nav-link" href="{% url 'account_login' %}">Login</a>
-          <a class="btn" href="{% url 'account_signup' %}">Register</a>
+          <a class="btn" href="{% url 'register' %}">Register</a>
         {% endif %}
       </nav>
     </div>
@@ -37,21 +49,67 @@
     </section>
   {% endif %}
 
-  <main class="container">
+  <main class="container page-content">
     {% block content %}{% endblock %}
   </main>
 
   <footer class="site-footer">
     <div class="container">
-      <small>© {{ now|date:"Y" }} CHIME</small>
+      <small>&copy; {{ now|date:"Y" }} CHIME. All rights reserved.</small>
       <div class="footer-links">
         <a href="{% url 'home' %}">Home</a>
         {% if request.user.is_authenticated %}
-          <a href="{% url 'account_dashboard' %}">Dashboard</a>
+          <a href="{% url 'dashboard' %}">Dashboard</a>
           <a href="{% url 'profile' %}">Profile</a>
+        {% else %}
+          <a href="{% provider_login_url 'google' process='login' %}">Sign in</a>
         {% endif %}
       </div>
     </div>
   </footer>
+
+  {% if request.user.is_authenticated %}
+    <form id="logout-form" method="post" action="{% url 'account_logout' %}" class="visually-hidden">
+      {% csrf_token %}
+    </form>
+  {% endif %}
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const toggle = document.getElementById("theme-toggle");
+      const root = document.documentElement;
+      const key = "chime-theme";
+      const updateIcon = () => {
+        const isDark = root.dataset.theme !== "light";
+        toggle?.classList.toggle("is-dark", isDark);
+      };
+      toggle?.addEventListener("click", function () {
+        const next = root.dataset.theme === "light" ? "dark" : "light";
+        root.dataset.theme = next;
+        try {
+          localStorage.setItem(key, next);
+        } catch (e) {}
+        updateIcon();
+      });
+      updateIcon();
+
+      const navToggle = document.querySelector("[data-nav-toggle]");
+      const navPanel = document.querySelector("[data-nav-panel]");
+      navToggle?.addEventListener("click", function () {
+        const expanded = this.getAttribute("aria-expanded") === "true";
+        this.setAttribute("aria-expanded", String(!expanded));
+        navPanel?.classList.toggle("open", !expanded);
+      });
+
+      const logoutBtn = document.querySelector("[data-logout-trigger]");
+      const logoutForm = document.getElementById("logout-form");
+      logoutBtn?.addEventListener("click", function () {
+        const confirmed = window.confirm("Are you sure you want to sign out?");
+        if (confirmed) {
+          logoutForm?.submit();
+        }
+      });
+    });
+  </script>
 </body>
 </html>

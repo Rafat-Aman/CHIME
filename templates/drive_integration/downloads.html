@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% load static %}
+{% block title %}Distributed Downloads{% endblock %}
+{% block head %}
+  {{ block.super }}
+  <link rel="stylesheet" href="{% static 'drive_integration/css/downloads.css' %}">
+{% endblock %}
+{% block content %}
+  {% csrf_token %}
+  <div class="downloads-container">
+    <div class="page-head">
+      <div>
+        <h1>Your Uploaded Files</h1>
+        <p class="subtitle">Select a file to pull each chunk from Drive and stitch it back together in your browser.</p>
+      </div>
+      <div class="page-actions">
+        <a class="btn-outline small" href="{% url 'uploads' %}">Back to Uploads</a>
+        <button type="button" class="btn-outline small" id="selectAllManifests">Select All</button>
+        <button type="button" class="btn-outline small" id="clearSelectedManifests">Clear</button>
+        <button id="downloadSelected" class="btn small" disabled>Download Selected</button>
+        <button id="healthSelected" class="btn-outline small" disabled>Health Check Selected</button>
+        <button id="deleteSelected" class="btn-outline small delete" disabled>Delete Selected</button>
+      </div>
+    </div>
+
+    <div class="download-filters">
+      <label>
+        Sort by:
+        <select id="sortManifests">
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="name_asc">Name (A→Z)</option>
+          <option value="name_desc">Name (Z→A)</option>
+          <option value="type_asc">Type (A→Z)</option>
+          <option value="type_desc">Type (Z→A)</option>
+          <option value="size_desc">Size (High→Low)</option>
+          <option value="size_asc">Size (Low→High)</option>
+        </select>
+      </label>
+      <label>
+        Group by:
+        <select id="groupManifests">
+          <option value="none">None</option>
+          <option value="type">File Type</option>
+          <option value="date">Upload Date</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="downloadStatus" class="status-banner hidden">
+      <strong>Status:</strong> <span id="downloadStatusText">Idle</span>
+    </div>
+
+    <div id="manifestList" class="manifest-list"></div>
+    <p id="emptyState" class="empty-state{% if manifests %} hidden{% endif %}">
+      No manifests found. Upload something first, then return here to download it.
+    </p>
+  </div>
+
+  {{ manifests|json_script:"manifest-data" }}
+  <script>
+    const DOWNLOAD_CHUNK_URL = "{% url 'download_chunk' %}";
+    const DELETE_MANIFEST_URL = "{% url 'delete_manifest' %}";
+    const MANIFEST_HEALTH_URL = "{% url 'manifest_health' %}";
+  </script>
+  <script src="{% static 'drive_integration/js/download.js' %}"></script>
+{% endblock %}

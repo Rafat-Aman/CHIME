@@ -1,10 +1,10 @@
-# core/google_api.py
 from __future__ import annotations
 import requests
 from typing import Dict, Optional
 from allauth.socialaccount.models import SocialApp, SocialToken, SocialAccount
 from django.conf import settings
 from django.utils.timezone import now
+from datetime import timedelta  # ensure real expiry timestamps
 
 GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 DRIVE_ABOUT_URL = "https://www.googleapis.com/drive/v3/about?fields=storageQuota"
@@ -52,9 +52,7 @@ def _refresh_access_token(token_obj: SocialToken) -> SocialToken:
     if new_refresh:
         token_obj.token_secret = new_refresh
     if expires_in:
-        # allauth’s SocialToken has expires_at; saving None is okay too
-        token_obj.expires_at = now() + settings.timedelta(seconds=int(expires_in)) if hasattr(settings, "timedelta") else token_obj.expires_at
-        # we don’t strictly need to compute expires_at; access token will work until 401 anyway
+        token_obj.expires_at = now() + timedelta(seconds=int(expires_in))  # actually update expiry
     token_obj.save()
     return token_obj
 
@@ -86,19 +84,17 @@ def get_storage_quota(sa: SocialAccount) -> Optional[Dict[str, str]]:
 
     data = resp.json()
     quota = data.get("storageQuota") or {}
-    # Fields may be strings of integers (bytes). Convert to human readable.
+
     def _fmt(b: Optional[str]) -> Optional[str]:
         try:
             v = int(b)
         except Exception:
             return None
-        # Format as GB with 1 decimal
         gb = v / (1024**3)
         return f"{gb:.1f} GB"
 
-    limit = quota.get("limit")           # total alloc
-    usage = quota.get("usage")           # total used
-    # Some accounts can return "0" or omit limit (unlimited); handle gracefully
+    limit = quota.get("limit")
+    usage = quota.get("usage")
     limit_gb = _fmt(limit) if limit and limit != "0" else None
     usage_gb = _fmt(usage) if usage else None
 

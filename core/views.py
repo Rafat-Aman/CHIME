@@ -1,5 +1,6 @@
 ﻿# core/views.py
-from __future__ import annotations
+import requests
+
 
 from django.conf import settings
 from django.contrib import messages
@@ -7,7 +8,11 @@ from django.contrib.auth import login as auth_login
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.shortcuts import render, redirect, get_object_or_404
-
+from urllib.parse import urlencode
+#chunking
+from django.http import JsonResponse
+from google.oauth2.credentials import Credentials
+from django.views.decorators.csrf import csrf_exempt
 # allauth
 from allauth.socialaccount.models import SocialAccount, SocialApp, SocialToken
 
@@ -172,7 +177,7 @@ def register(request):
         form = FormClass()
 
     # Use your existing template; adjust name if yours differs
-    return render(request, "registration/register.html", {"form": form})
+    return render(request, "register.html", {"form": form})
 
 
 @login_required
@@ -182,6 +187,23 @@ def profile(request):
     Extend with whatever context your template expects.
     """
     return render(request, "profile.html", {})
+
+
+def google_login_redirect(request):
+    """
+    Redirect any legacy login/signup URLs straight to Google's OAuth flow.
+    """
+    params = {}
+    next_url = request.GET.get("next")
+    if next_url:
+        params["next"] = next_url
+    qs = f"?{urlencode(params)}" if params else ""
+    return redirect(f"/accounts/google/login/{qs}")
+
+
+def google_cancel_redirect(request):
+    messages.warning(request, "Google sign-in was cancelled. Please try again.")
+    return google_login_redirect(request)
 
 
 # --- keep all your existing imports + helpers as-is ---
@@ -313,4 +335,4 @@ def dashboard(request):
         "pct_used": (int(round((total_used_b / total_limit_b) * 100)) if total_limit_b else None),
     }
 
-    return render(request, "account/dashboard.html", {"items": items, "total": total})
+    return render(request, "dashboard.html", {"items": items, "total": total})

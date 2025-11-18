@@ -16,21 +16,19 @@
         <a class="btn-outline" href="{% url 'profile' %}">View Profile</a>
       </div>
     {% else %}
+      {% if has_google_app %}
       <div class="actions">
-        <a class="btn" href="{% url 'account_login' %}">Login</a>
-        <a class="btn-outline" href="{% url 'account_signup' %}">Create account</a>
-        {% if has_google_app %}
           <a class="btn-google" href="{% provider_login_url 'google' %}">
             <span class="g-icon" aria-hidden="true"></span> Sign in with Google
           </a>
-        {% endif %}
-      </div>
-
-      {% if not has_google_app %}
-        <p class="note">
-          Google sign-in isn’t configured yet. In <strong>/admin</strong>, set:
-          <em>Sites → 127.0.0.1:8000</em> and <em>Social applications → Google</em>.
-        </p>
+        </div>
+      {% else %}
+        <div class="actions">
+          <p class="note">
+            Google sign-in isn’t configured yet. In <strong>/admin</strong>, set:
+            <em>Sites → 127.0.0.1:8000</em> and <em>Social applications → Google</em>.
+          </p>
+        </div>
       {% endif %}
     {% endif %}
   </section>

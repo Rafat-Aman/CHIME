@@ -1,48 +1,46 @@
 from pathlib import Path
+import os
 import environ
+from datetime import timedelta
 
 # === Paths & env ===
 BASE_DIR = Path(__file__).resolve().parent.parent
-env = environ.Env(DEBUG=(bool, False))
-environ.Env.read_env(BASE_DIR / ".env")  # .env sits next to manage.py
+env = environ.Env(
+    DEBUG=(bool, False),
+)
+# Load environment variables from .env next to manage.py if present
+environ.Env.read_env(os.path.join(BASE_DIR, ".env"))
 
 # === Core from .env ===
-DEBUG = env("DEBUG")
-SECRET_KEY = env("SECRET_KEY")
+DEBUG = env("DEBUG", default=False)
+SECRET_KEY = env("SECRET_KEY", default="insecure-secret-key")  # override in .env
 ALLOWED_HOSTS = [h.strip() for h in env("ALLOWED_HOSTS", default="").split(",") if h.strip()]
 TIME_ZONE = env("TIME_ZONE", default="UTC")
 CSRF_TRUSTED_ORIGINS = [o.strip() for o in env("CSRF_TRUSTED_ORIGINS", default="").split(",") if o.strip()]
 
-# === Installed apps ===
+# === Base Django ===
 INSTALLED_APPS = [
-    # Django
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    "django.contrib.sites",  # required by allauth
+    "django.contrib.sites",
 
-    # Your app
-    "core",
-
-    # Allauth
+    # Third-party
     "allauth",
     "allauth.account",
     "allauth.socialaccount",
     "allauth.socialaccount.providers.google",
+
+    # Your apps
+    "core",
+    "drive_integration",
 ]
 
-# === Auth backends (keep Django + add allauth) ===
-AUTHENTICATION_BACKENDS = [
-    "django.contrib.auth.backends.ModelBackend",
-    "allauth.account.auth_backends.AuthenticationBackend",
-]
+SITE_ID = int(env("SITE_ID", default=1))
 
-SITE_ID = 1  # Sites framework row (set its domain in /admin)
-
-# === Middleware (add AccountMiddleware after AuthenticationMiddleware) ===
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
@@ -50,17 +48,13 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "allauth.account.middleware.AccountMiddleware",  # required by allauth
+    "allauth.account.middleware.AccountMiddleware",  # <-- required by allauth
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
-# === URLs / WSGI / ASGI ===
 ROOT_URLCONF = "config.urls"
-WSGI_APPLICATION = "config.wsgi.application"
-ASGI_APPLICATION = "config.asgi.application"
 
-# === Templates ===
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -69,7 +63,7 @@ TEMPLATES = [
         "OPTIONS": {
             "context_processors": [
                 "django.template.context_processors.debug",
-                "django.template.context_processors.request",  # allauth needs request in templates
+                "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
             ],
@@ -77,16 +71,15 @@ TEMPLATES = [
     },
 ]
 
-# === Database (PostgreSQL) ===
+WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = env("ASGI_APPLICATION", default=None) or None
+
+# === Database ===
 DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.postgresql",
-        "NAME": env("DB_NAME"),
-        "USER": env("DB_USER"),
-        "PASSWORD": env("DB_PASSWORD"),
-        "HOST": env("DB_HOST"),
-        "PORT": env("DB_PORT"),
-    }
+    "default": env.db(
+        "DATABASE_URL",
+        default=f"sqlite:///{(BASE_DIR / 'db.sqlite3').as_posix()}"
+    )
 }
 
 # === Password validation ===
@@ -98,12 +91,14 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 # === I18N / TZ ===
-LANGUAGE_CODE = "en-us"
+LANGUAGE_CODE = env("LANGUAGE_CODE", default="en-us")
+TIME_ZONE = TIME_ZONE or "UTC"
 USE_I18N = True
 USE_TZ = True
 
-# === Static files ===
+# === Static & Media ===
 STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STORAGES = {
@@ -114,43 +109,33 @@ STORAGES = {
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # === Redirects & auth URLs ===
-LOGIN_REDIRECT_URL = "/"             # redirect to homepage after login
-LOGOUT_REDIRECT_URL = "/"            # redirect to homepage after logout
-LOGIN_URL = "account_login"          # allauth login view
+LOGIN_REDIRECT_URL = "dashboard"
+LOGOUT_REDIRECT_URL = "home"
+LOGIN_URL = "account_login"  # allauth login view
 
-# === Email (development) ===
+# === Email (dev) ===
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
 
 # === allauth options ===
-ACCOUNT_EMAIL_REQUIRED = True
-ACCOUNT_USERNAME_REQUIRED = False
-ACCOUNT_EMAIL_VERIFICATION = "none"  # "mandatory" for production
-ACCOUNT_AUTHENTICATION_METHOD = "email"
-ACCOUNT_UNIQUE_EMAIL = True
-ACCOUNT_SIGNUP_REDIRECT_URL = "/"    # ensure users return to home if signup occurs
-ACCOUNT_LOGOUT_REDIRECT_URL = "/"
+ACCOUNT_SIGNUP_FIELDS = ["username*", "email*", "password1*", "password2*"]
+ACCOUNT_EMAIL_VERIFICATION = "none"         # consider "mandatory" in prod
+ACCOUNT_LOGIN_METHODS = {"email", "username"}
+SOCIALACCOUNT_STORE_TOKENS = True           # store access/refresh tokens
 
-# === Social account settings ===
-SOCIALACCOUNT_STORE_TOKENS = True
-SOCIALACCOUNT_AUTO_SIGNUP = True     # <--- automatically create user after Google login
-SOCIALACCOUNT_EMAIL_VERIFICATION = "none"
-
-# Google: request refresh tokens & force consent (first time)
+# === ✅ Google OAuth unified scopes ===
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": [
             "openid", "email", "profile",
-            "https://www.googleapis.com/auth/drive.metadata.readonly"
+            "https://www.googleapis.com/auth/drive.metadata.readonly"  # NEW
         ],
-        "AUTH_PARAMS": {"access_type": "offline", "prompt": "consent"},
+        "AUTH_PARAMS": {
+            "access_type": "offline",  # ensures refresh tokens
+            "prompt": "consent",       # always ask for re-consent
+            "include_granted_scopes": "false",
+        },
     }
 }
-
-# === OAuth Redirect URI ===
-SOCIAL_AUTH_GOOGLE_OAUTH2_REDIRECT_URI = "http://127.0.0.1:8000/accounts/google/login/callback/"
-
-# === Session handling ===
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-
-# === Custom adapter (optional, ensure it exists) ===
 SOCIALACCOUNT_ADAPTER = "core.adapters.SocialAccountAdapter"
+
