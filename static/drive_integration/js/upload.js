@@ -13,7 +13,12 @@ function csrf() {
 
 const BYTES_PER_MB = 1024 * 1024;
 const toMB = b => (b / BYTES_PER_MB).toFixed(1);
+const toGB = b => (b / (1024 * 1024 * 1024)).toFixed(2);
 
+const isPhone = (/Mobi|Android/i.test(navigator.userAgent || "") && !/iPad/i.test(navigator.userAgent || ""))
+  || ((typeof screen !== "undefined" && screen.width <= 768) && (navigator.maxTouchPoints || 0) > 1);
+const MAX_UPLOAD_BYTES = (isPhone ? 5 : 10) * 1024 * 1024 * 1024; // 5GB on phone, 10GB on desktop
+const MAX_CHUNK_MB = 50; // keep chunk size small enough to satisfy server memory limits
 const chunkSizeInput = document.getElementById("chunkSize");
 const fileInput = document.getElementById("fileInput");
 const fileDropZone = document.getElementById("fileDropZone");
@@ -30,8 +35,12 @@ const progressContainer = document.getElementById("progressContainer");
 const accountBlocks = Array.from(document.querySelectorAll(".account-block"));
 const uploadStatusBanner = document.getElementById("uploadStatus");
 const uploadStatusText = document.getElementById("uploadStatusText");
+const removeFileBtn = document.getElementById("removeFileBtn");
 
-let chunkSizeMB = parseInt(chunkSizeInput.value, 10) || 500;
+let chunkSizeMB = Math.min(parseInt(chunkSizeInput?.value, 10) || 8, MAX_CHUNK_MB);
+if (chunkSizeInput) {
+  chunkSizeInput.value = chunkSizeMB;
+}
 let chunkSizeBytes = chunkSizeMB * BYTES_PER_MB;
 let totalChunksOverall = 0;
 let totalBytesOverall = 0;
@@ -210,6 +219,17 @@ function setActiveFile(index) {
   updateFileInfo();
   renderFileList();
   startEntryChecksum(getActiveEntry());
+}
+
+function removeActiveFile() {
+  if (activeFileIndex < 0 || activeFileIndex >= fileEntries.length) return;
+  fileEntries.splice(activeFileIndex, 1);
+  activeFileIndex = Math.min(activeFileIndex, fileEntries.length - 1);
+  userAdjustedDistribution = false;
+  recalcTotals();
+  renderFileList();
+  updateFileInfo();
+  updateUploadStatus("idle", fileEntries.length ? "File removed from queue." : "Waiting for upload.");
 }
 
 function addFiles(fileList) {
@@ -422,6 +442,13 @@ function validateTotals(extraRemainder) {
     uploadBtn.disabled = true;
     return;
   }
+  if (totalBytesOverall > MAX_UPLOAD_BYTES) {
+    const limitGB = isPhone ? 5 : 10;
+    warningEl.textContent = `Upload limit exceeded: ${toGB(totalBytesOverall)} GB selected. Limit is ${limitGB} GB. Remove some files.`;
+    warningEl.classList.remove("hidden");
+    uploadBtn.disabled = true;
+    return;
+  }
   if (totalCapacityChunks < totalChunksOverall) {
     warningEl.textContent = "Not enough available Drive space to cover this upload.";
     warningEl.classList.remove("hidden");
@@ -435,7 +462,7 @@ function validateTotals(extraRemainder) {
     return;
   }
   if (extraRemainder && extraRemainder > 0 && extraRemainder !== Infinity) {
-    warningEl.textContent = "Unable to distribute chunks evenly — adjust the sliders manually.";
+    warningEl.textContent = "Unable to distribute chunks evenly. Adjust the sliders manually.";
     warningEl.classList.remove("hidden");
     uploadBtn.disabled = true;
     return;
@@ -452,7 +479,7 @@ function createProgressBar(label, parent) {
     <div class="progress-outer"><div class="progress-inner"></div></div>
     <div class="progress-text">0 MB / 0 MB</div>
     <button class="retry hidden">Retry</button>
-    <div class="checkmark hidden">✓</div>`;
+    <div class="checkmark hidden">&#10003;</div>`;
   parent.appendChild(block);
   return block;
 }
@@ -504,10 +531,16 @@ fileInput?.addEventListener("change", e => {
   e.target.value = "";
 });
 
+removeFileBtn?.addEventListener("click", e => {
+  e.preventDefault();
+  removeActiveFile();
+});
+
 chunkSizeInput.addEventListener("input", e => {
   const next = parseInt(e.target.value, 10);
   if (Number.isNaN(next) || next <= 0) return;
-  chunkSizeMB = next;
+  chunkSizeMB = Math.min(next, MAX_CHUNK_MB);
+  chunkSizeInput.value = chunkSizeMB;
   userAdjustedDistribution = false;
   recalcTotals();
   updateFileInfo();
@@ -662,6 +695,7 @@ uploadBtn.addEventListener("click", async () => {
             start: 0,
             end: blob.size - 1,
             mime: currentFile.type || "application/octet-stream",
+            total_size: blob.size,
           });
 
           const putRes = await fetch(`${PROXY_CHUNK_URL}?${qs.toString()}`, {

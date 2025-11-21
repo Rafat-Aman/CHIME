@@ -164,6 +164,7 @@ def proxy_resumable_chunk(request):
     account_id = request.GET.get("account_id")
     start = request.GET.get("start")
     end = request.GET.get("end")
+    total_size = request.GET.get("total_size")
     mime = request.GET.get("mime", "application/octet-stream")
 
     if not (upload_url and account_id and start is not None and end is not None):
@@ -174,6 +175,8 @@ def proxy_resumable_chunk(request):
         end_i = int(end)
     except ValueError:
         return JsonResponse({"error": "start/end must be integers"}, status=400)
+    if end_i < start_i:
+        return JsonResponse({"error": "end must be >= start"}, status=400)
 
     parsed_url = urlparse(upload_url)
     allowed_host_suffixes = getattr(
@@ -187,7 +190,9 @@ def proxy_resumable_chunk(request):
     ) or not parsed_url.path.startswith("/upload/drive/v3/files"):
         return JsonResponse({"error": "Invalid upload URL."}, status=400)
 
-    max_chunk_bytes = getattr(settings, "MAX_PROXY_CHUNK_BYTES", 1024 * 1024 * 1024)
+    max_chunk_bytes = getattr(settings, "MAX_PROXY_CHUNK_BYTES", 50 * 1024 * 1024)
+
+    expected_length = (end_i - start_i) + 1
 
     # Read raw body
     body_bytes = request.body
@@ -195,6 +200,15 @@ def proxy_resumable_chunk(request):
         return JsonResponse({"error": "Chunk too large."}, status=413)
     if not body_bytes:
         return JsonResponse({"error": "Empty body"}, status=400)
+    if expected_length and len(body_bytes) != expected_length:
+        return JsonResponse(
+            {
+                "error": "Content length mismatch",
+                "expected_bytes": expected_length,
+                "received_bytes": len(body_bytes),
+            },
+            status=400,
+        )
 
     access_token, err = _get_google_token_for(request, account_id)
     if err:
@@ -203,8 +217,8 @@ def proxy_resumable_chunk(request):
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": mime,
-        # chunk uploaded as independent file: 0-(len-1)/len
-        "Content-Range": f"bytes 0-{len(body_bytes)-1}/{len(body_bytes)}",
+        # Content-Range drives resumable correctness; use provided start/end and total if sent
+        "Content-Range": f"bytes {start_i}-{end_i}/{total_size or (end_i + 1)}",
     }
 
     try:
@@ -212,7 +226,18 @@ def proxy_resumable_chunk(request):
     except Exception as e:
         return JsonResponse({"error": f"Network error: {e}"}, status=500)
 
-    content_type = gresp.headers.get("Content-Type", "text/plain")
+    content_type = gresp.headers.get("Content-Type", "application/json")
+    if gresp.status_code not in (200, 201, 308):
+        snippet = gresp.text[:500] if gresp.text else ""
+        return JsonResponse(
+            {
+                "error": "Drive upload failed",
+                "status": gresp.status_code,
+                "details": snippet,
+            },
+            status=400,
+        )
+
     return HttpResponse(gresp.content, status=gresp.status_code, content_type=content_type)
 
 

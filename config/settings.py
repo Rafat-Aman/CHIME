@@ -114,10 +114,25 @@ AUTHENTICATION_BACKENDS = [
 
 LOGIN_REDIRECT_URL = env("LOGIN_REDIRECT_URL", default="/")
 LOGOUT_REDIRECT_URL = env("LOGOUT_REDIRECT_URL", default="/")
-ACCOUNT_AUTHENTICATION_METHOD = env("ACCOUNT_AUTHENTICATION_METHOD", default="username_email")
-ACCOUNT_EMAIL_REQUIRED = env.bool("ACCOUNT_EMAIL_REQUIRED", default=True)
 ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
-ACCOUNT_USERNAME_REQUIRED = env.bool("ACCOUNT_USERNAME_REQUIRED", default=True)
+# Map deprecated allauth settings to the newer `ACCOUNT_LOGIN_METHODS` and `ACCOUNT_SIGNUP_FIELDS`
+_account_auth_method = env("ACCOUNT_AUTHENTICATION_METHOD", default="username_email")
+_account_email_required = env.bool("ACCOUNT_EMAIL_REQUIRED", default=True)
+_account_username_required = env.bool("ACCOUNT_USERNAME_REQUIRED", default=True)
+
+if _account_auth_method == "username":
+    ACCOUNT_LOGIN_METHODS = {"username"}
+elif _account_auth_method == "email":
+    ACCOUNT_LOGIN_METHODS = {"email"}
+else:  # "username_email" or any other combined value
+    ACCOUNT_LOGIN_METHODS = {"email", "username"}
+
+ACCOUNT_SIGNUP_FIELDS = [
+    "username*" if _account_username_required else "username",
+    "email*" if _account_email_required else "email",
+    "password1*",
+    "password2*",
+]
 
 SOCIALACCOUNT_STORE_TOKENS = True
 SOCIALACCOUNT_ADAPTER = env("SOCIALACCOUNT_ADAPTER", default="core.adapters.SocialAccountAdapter")
@@ -198,5 +213,10 @@ if "corsheaders" in INSTALLED_APPS:
 
 # === Default primary key ===
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+# === Upload proxy limits (Drive resumable chunks) ===
+MAX_PROXY_CHUNK_BYTES = env.int("MAX_PROXY_CHUNK_BYTES", default=50 * 1024 * 1024)  # 50MB per proxied chunk
+DATA_UPLOAD_MAX_MEMORY_SIZE = env.int("DATA_UPLOAD_MAX_MEMORY_SIZE", default=MAX_PROXY_CHUNK_BYTES)
+FILE_UPLOAD_MAX_MEMORY_SIZE = env.int("FILE_UPLOAD_MAX_MEMORY_SIZE", default=MAX_PROXY_CHUNK_BYTES)
 # How many Google Drive accounts a user can link for distributed uploads
 MAX_DRIVE_ACCOUNTS = 5

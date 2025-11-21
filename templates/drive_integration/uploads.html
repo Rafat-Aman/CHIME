@@ -24,16 +24,20 @@
         <p><strong>Drag & drop files here</strong> or <span class="browse-link" id="fileBrowseTrigger">browse</span></p>
         <small>Supports multiple selections. Add more files anytime without losing your queue.</small>
       </div>
+      <p class="hint limit-hint">Upload limit: 10 GB on desktop, 5 GB on phones. Remove files if you exceed it.</p>
 
       <div class="config-row">
         <label>Chunk Size (MB):</label>
-        <input type="number" id="chunkSize" min="1" max="10240" value="500">
+        <input type="number" id="chunkSize" min="1" max="50" value="8">
       </div>
 
       <div id="selected-files-wrapper" class="selected-files hidden">
         <h4>Files queued</h4>
         <ul id="selectedFilesList"></ul>
         <p class="hint">Select a file to preview its info and adjust distribution sliders.</p>
+        <div class="file-actions">
+          <button type="button" class="btn-outline small" id="removeFileBtn">Remove selected</button>
+        </div>
       </div>
 
       <div id="file-info" class="hidden">
