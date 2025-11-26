@@ -12,7 +12,7 @@
 
     {% if request.user.is_authenticated %}
       <div class="actions">
-        <a class="btn" href="{% url 'account_dashboard' %}">Go to Dashboard</a>
+        <a class="btn" href="{% url 'dashboard' %}">Go to Dashboard</a>
         <a class="btn-outline" href="{% url 'profile' %}">View Profile</a>
       </div>
     {% else %}

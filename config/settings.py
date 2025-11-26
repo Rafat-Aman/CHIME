@@ -1,3 +1,4 @@
+# config/settings.py
 from pathlib import Path
 import os
 import environ
@@ -48,7 +49,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
-    "allauth.account.middleware.AccountMiddleware",  # <-- required by allauth
+    "allauth.account.middleware.AccountMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -100,42 +101,102 @@ USE_TZ = True
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_DIRS = [BASE_DIR / "static"]
-STATIC_ROOT = BASE_DIR / "staticfiles"
-STORAGES = {
-    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"}
-}
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-# === Defaults ===
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+MEDIA_URL = "/media/"
+MEDIA_ROOT = BASE_DIR / "media"
 
-# === Redirects & auth URLs ===
-LOGIN_REDIRECT_URL = "dashboard"
-LOGOUT_REDIRECT_URL = "home"
-LOGIN_URL = "account_login"  # allauth login view
+# === Auth / Allauth ===
+AUTHENTICATION_BACKENDS = [
+    "django.contrib.auth.backends.ModelBackend",
+    "allauth.account.auth_backends.AuthenticationBackend",
+]
 
-# === Email (dev) ===
-EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+LOGIN_REDIRECT_URL = env("LOGIN_REDIRECT_URL", default="/")
+LOGOUT_REDIRECT_URL = env("LOGOUT_REDIRECT_URL", default="/")
+ACCOUNT_AUTHENTICATION_METHOD = env("ACCOUNT_AUTHENTICATION_METHOD", default="username_email")
+ACCOUNT_EMAIL_REQUIRED = env.bool("ACCOUNT_EMAIL_REQUIRED", default=True)
+ACCOUNT_EMAIL_VERIFICATION = env("ACCOUNT_EMAIL_VERIFICATION", default="optional")
+ACCOUNT_USERNAME_REQUIRED = env.bool("ACCOUNT_USERNAME_REQUIRED", default=True)
 
-# === allauth options ===
-ACCOUNT_SIGNUP_FIELDS = ["username*", "email*", "password1*", "password2*"]
-ACCOUNT_EMAIL_VERIFICATION = "none"         # consider "mandatory" in prod
-ACCOUNT_LOGIN_METHODS = {"email", "username"}
-SOCIALACCOUNT_STORE_TOKENS = True           # store access/refresh tokens
+SOCIALACCOUNT_STORE_TOKENS = True
+SOCIALACCOUNT_ADAPTER = env("SOCIALACCOUNT_ADAPTER", default="core.adapters.SocialAccountAdapter")
 
 # === ✅ Google OAuth unified scopes ===
+# config/settings.py
+
 SOCIALACCOUNT_PROVIDERS = {
     "google": {
         "SCOPE": [
-            "openid", "email", "profile",
-            "https://www.googleapis.com/auth/drive.metadata.readonly"  # NEW
+            # Use ONLY full URLs. No "email", no "profile", no "openid".
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+            "https://www.googleapis.com/auth/drive.file",
+            "https://www.googleapis.com/auth/drive.metadata.readonly",
         ],
         "AUTH_PARAMS": {
-            "access_type": "offline",  # ensures refresh tokens
-            "prompt": "consent",       # always ask for re-consent
-            "include_granted_scopes": "false",
+            "access_type": "offline",
+            "prompt": "consent",
+            "include_granted_scopes": "true",
         },
     }
 }
-SESSION_EXPIRE_AT_BROWSER_CLOSE = True
-SOCIALACCOUNT_ADAPTER = "core.adapters.SocialAccountAdapter"
 
+SESSION_EXPIRE_AT_BROWSER_CLOSE = env.bool("SESSION_EXPIRE_AT_BROWSER_CLOSE", default=True)
+
+# === Email ===
+EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend")
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="webmaster@localhost")
+
+# === Logging ===
+LOG_LEVEL = env("LOG_LEVEL", default="INFO")
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": LOG_LEVEL},
+    "loggers": {
+        "django.request": {
+            "handlers": ["console"],
+            "level": "WARNING",
+            "propagate": True,
+        },
+    },
+}
+
+# === Security ===
+SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https") if env.bool("USE_X_FORWARDED_PROTO", default=False) else None
+SECURE_SSL_REDIRECT = env.bool("SECURE_SSL_REDIRECT", default=not DEBUG and False)
+SESSION_COOKIE_SECURE = env.bool("SESSION_COOKIE_SECURE", default=not DEBUG)
+CSRF_COOKIE_SECURE = env.bool("CSRF_COOKIE_SECURE", default=not DEBUG)
+SECURE_HSTS_SECONDS = env.int("SECURE_HSTS_SECONDS", default=0 if DEBUG else 31536000)
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env.bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", default=not DEBUG)
+SECURE_HSTS_PRELOAD = env.bool("SECURE_HSTS_PRELOAD", default=not DEBUG)
+X_FRAME_OPTIONS = env("X_FRAME_OPTIONS", default="DENY")
+
+# === Custom user model ===
+_custom_user_model = env("AUTH_USER_MODEL", default="")
+if _custom_user_model:
+    AUTH_USER_MODEL = _custom_user_model
+
+# === REST Framework (optional) ===
+if "rest_framework" in INSTALLED_APPS:
+    REST_FRAMEWORK = {
+        "DEFAULT_AUTHENTICATION_CLASSES": [
+            "rest_framework.authentication.SessionAuthentication",
+        ],
+        "DEFAULT_PERMISSION_CLASSES": [
+            "rest_framework.permissions.IsAuthenticatedOrReadOnly",
+        ],
+    }
+
+# === CORS (optional) ===
+if "corsheaders" in INSTALLED_APPS:
+    MIDDLEWARE.insert(1, "corsheaders.middleware.CorsMiddleware")
+    CORS_ALLOWED_ORIGINS = [o.strip() for o in env("CORS_ALLOWED_ORIGINS", default="").split(",") if o.strip()]
+    CORS_ALLOW_ALL_ORIGINS = env.bool("CORS_ALLOW_ALL_ORIGINS", default=False)
+
+# === Default primary key ===
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+# How many Google Drive accounts a user can link for distributed uploads
+MAX_DRIVE_ACCOUNTS = 5

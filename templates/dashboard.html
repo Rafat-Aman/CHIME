@@ -1,0 +1,304 @@
+{% extends "base.html" %}
+{% load socialaccount static %}
+
+{% block title %}Dashboard · CHIME{% endblock %}
+
+{% block head %}
+{{ block.super }}
+<style>
+  /* --- Dashboard Specific Styles --- */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr; /* Main content vs Sidebar */
+    gap: 24px;
+    margin-top: 24px;
+  }
+
+  /* Account List */
+  .account-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: grid;
+    gap: 16px;
+  }
+
+  .account-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+  }
+
+  .account-card:hover {
+    border-color: var(--border-hover);
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .account-info {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .account-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid var(--border);
+  }
+
+  .account-details h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-main);
+  }
+
+  .account-details p {
+    margin: 2px 0 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  /* Stats Grid inside Account Card */
+  .quota-grid {
+    display: grid;
+    grid-template-columns: repeat(3, auto);
+    gap: 16px;
+    margin-top: 8px;
+  }
+
+  .quota-item {
+    font-size: 0.8rem;
+  }
+  .quota-item span {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    margin-bottom: 2px;
+  }
+  .quota-item strong {
+    color: var(--text-main);
+  }
+
+  /* Storage Widget (Donut) */
+  .storage-widget {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px 24px;
+    text-align: center;
+    position: sticky;
+    top: 24px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  }
+
+  .donut {
+    --size: 160px;
+    --width: 12px;
+    width: var(--size);
+    height: var(--size);
+    border-radius: 50%;
+    background: conic-gradient(var(--brand) calc(var(--pct) * 1%), var(--border) 0);
+    margin: 0 auto 20px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    box-shadow: 0 0 20px rgba(66, 133, 244, 0.1);
+  }
+
+  .donut::before {
+    content: "";
+    position: absolute;
+    width: calc(var(--size) - (var(--width) * 2));
+    height: calc(var(--size) - (var(--width) * 2));
+    background: var(--panel);
+    border-radius: 50%;
+  }
+
+  .donut-content {
+    position: relative;
+    z-index: 1;
+  }
+
+  .donut-fig {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--text-main);
+  }
+
+  .donut-label {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  
+  /* Unlimited State */
+  .donut.unlimited {
+    background: conic-gradient(var(--success) 100%, var(--border) 0);
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+  }
+
+  .storage-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+  }
+  .storage-stat small { display: block; color: var(--text-muted); font-size: 0.8rem; }
+  .storage-stat strong { color: var(--text-main); font-size: 1rem; }
+
+
+  @media (max-width: 900px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+    .storage-widget {
+      order: -1; /* Put chart on top on mobile */
+      position: static;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      padding: 20px;
+      text-align: left;
+    }
+    .donut { margin: 0; --size: 100px; }
+    .storage-meta { border: none; margin: 0; flex-direction: column; gap: 8px; text-align: right; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+  
+  <div class="page-head">
+    <div>
+      <h1>Dashboard</h1>
+      <p class="hint">Manage your connected storage accounts and monitor usage.</p>
+    </div>
+    <div class="page-actions">
+      <a class="btn-outline" href="{% url 'uploads' %}">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        New Upload
+      </a>
+      <a class="btn btn-google" href="{% provider_login_url 'google' process='connect' %}">
+        <span class="g-icon"></span> Connect Account +
+      </a>
+    </div>
+  </div>
+
+  <div class="dashboard-grid">
+    
+    <section>
+      <h3 style="margin-top:0; border:none;">Connected Accounts</h3>
+      
+      {% if items %}
+        <ul class="account-list">
+          {% for item in items %}
+            {% with acc=item.account data=item.account.extra_data q=item.quota err=item.error %}
+            <li class="account-card">
+              <div class="account-info">
+                {% if data.picture %}
+                  <img class="account-avatar" src="{{ data.picture }}" alt="Profile">
+                {% else %}
+                  <div class="account-avatar" style="background:var(--border); display:grid; place-items:center;">
+                    <span style="font-weight:bold; color:var(--text-muted);">{{ data.name|first|default:"G" }}</span>
+                  </div>
+                {% endif %}
+
+                <div class="account-details">
+                  <h4>{{ data.name|default:acc.uid }}</h4>
+                  <p>{{ data.email|default:"(no email)" }}</p>
+
+                  {% if q %}
+                    <div class="quota-grid">
+                      <div class="quota-item"><span>Used</span> <strong>{{ q.usage }}</strong></div>
+                      <div class="quota-item"><span>Limit</span> <strong>{{ q.limit }}</strong></div>
+                      {% if q.remaining %}
+                        <div class="quota-item"><span>Free</span> <strong style="color:var(--success);">{{ q.remaining }}</strong></div>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+
+                  {% if err %}
+                    <div style="margin-top:8px; padding:8px 12px; background:var(--danger-bg); border-radius:6px; font-size:0.85rem; color:var(--danger);">
+                      <strong style="display:block; margin-bottom:4px;">⚠ Connection Issue</strong>
+                      {{ err }}
+                      {% if "ACCESS_TOKEN_SCOPE_INSUFFICIENT" in err or "insufficientPermissions" in err %}
+                        <div style="margin-top:6px;">
+                          <a href="{% provider_login_url 'google' process='connect' %}" style="color:var(--brand); font-weight:600;">Re-authorize Account &rarr;</a>
+                        </div>
+                      {% endif %}
+                    </div>
+                  {% endif %}
+                </div>
+              </div>
+
+              <form action="{% url 'disconnect_google' acc.pk %}" method="post" onsubmit="return confirm('Disconnect {{ data.email }}? This will prevent future uploads to this drive.');">
+                {% csrf_token %}
+                <button class="btn-outline small" type="submit" style="color:var(--danger); border-color:var(--border);">
+                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                </button>
+              </form>
+            </li>
+            {% endwith %}
+          {% endfor %}
+        </ul>
+      {% else %}
+        <div style="text-align:center; padding:40px; border:1px dashed var(--border); border-radius:12px; color:var(--text-muted);">
+          <p>No Google Drive accounts connected yet.</p>
+          <a href="{% provider_login_url 'google' process='connect' %}" style="color:var(--brand); font-weight:600;">Connect your first account</a>
+        </div>
+      {% endif %}
+    </section>
+
+    {% if total %}
+    <aside>
+      <div class="storage-widget">
+        {% if total.limit_bytes %}
+          <div class="donut" style="--pct: {{ total.pct_used|default:0 }};">
+            <div class="donut-content">
+              <div class="donut-fig">{{ total.avail_h }}</div>
+              <div class="donut-label">Free</div>
+            </div>
+          </div>
+          <div class="storage-meta">
+            <div class="storage-stat">
+              <small>Used</small>
+              <strong>{{ total.used_h }}</strong>
+            </div>
+            <div class="storage-stat">
+              <small>Total Capacity</small>
+              <strong>{{ total.limit_h }}</strong>
+            </div>
+          </div>
+        {% else %}
+          <div class="donut unlimited" style="--pct: 100;">
+             <div class="donut-content">
+                <div class="donut-fig">∞</div>
+                <div class="donut-label">Unlimited</div>
+             </div>
+          </div>
+          <div class="storage-meta">
+            <div class="storage-stat">
+              <small>Used so far</small>
+              <strong>{{ total.used_h }}</strong>
+            </div>
+          </div>
+        {% endif %}
+      </div>
+    </aside>
+    {% endif %}
+
+  </div>
+
+{% endblock %}

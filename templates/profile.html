@@ -6,15 +6,15 @@
   <div class="page-head">
     <h2>Your Profile</h2>
     <div class="page-actions">
-      <a class="btn-outline" href="{% url 'account_dashboard' %}">Dashboard</a>
+      <a class="btn-outline" href="{% url 'dashboard' %}">Dashboard</a>
     </div>
   </div>
 
   <section class="card">
     <dl class="details">
-      <div><dt>Username</dt><dd>{{ request.user.username }}</dd></div>
-      <div><dt>Email</dt><dd>{{ request.user.email|default:"—" }}</dd></div>
-      <div><dt>Joined</dt><dd>{{ request.user.date_joined|date:"M j, Y, P" }}</dd></div>
+      <div><dt>Username</dt><dd>{{ request.user.username }}</dd></div><br>
+      <div><dt>Email</dt><dd>{{ request.user.email|default:"—" }}</dd></div><br>
+      <div><dt>Joined</dt><dd>{{ request.user.date_joined|date:"M j, Y, P" }}</dd></div><br>
       <div><dt>Last login</dt><dd>{{ request.user.last_login|date:"M j, Y, P" }}</dd></div>
     </dl>
   </section>

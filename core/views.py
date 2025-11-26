@@ -161,23 +161,10 @@ def disconnect_google(request, pk: int):
 
 def register(request):
     """
-    Register a new user.
-    Uses your local SignUpForm if present; otherwise falls back to Django's UserCreationForm.
+    Local username/password registration is disabled.
+    Always send users to Google sign-in.
     """
-    FormClass = SignUpForm if SignUpForm else UserCreationForm
-
-    if request.method == "POST":
-        form = FormClass(request.POST)
-        if form.is_valid():
-            user = form.save()
-            auth_login(request, user)
-            messages.success(request, "Registration successful. Welcome!")
-            return redirect("dashboard")
-    else:
-        form = FormClass()
-
-    # Use your existing template; adjust name if yours differs
-    return render(request, "register.html", {"form": form})
+    return redirect("/accounts/google/login/")
 
 
 @login_required
@@ -336,3 +323,39 @@ def dashboard(request):
     }
 
     return render(request, "dashboard.html", {"items": items, "total": total})
+
+
+#uploadschuning
+@csrf_exempt
+@login_required
+def create_upload_session(request):
+    user = request.user
+    creds = Credentials.from_authorized_user_info(user.google_credentials)
+
+    filename = request.POST.get("filename")
+    filesize = request.POST.get("filesize")
+    mime_type = request.POST.get("mime_type")
+
+    headers = {
+        "Authorization": f"Bearer {creds.token}",
+        "Content-Type": "application/json; charset=UTF-8",
+    }
+    data = {
+        "name": filename,
+        "mimeType": mime_type,
+    }
+    params = {
+        "uploadType": "resumable",
+    }
+
+    response = requests.post(
+        "https://www.googleapis.com/upload/drive/v3/files",
+        headers=headers,
+        params=params,
+        json=data
+    )
+
+    upload_url = response.headers.get("Location")
+    return JsonResponse({"uploadUrl": upload_url})
+def upload_view(request):
+    return render(request, 'drive_integration/uploads.html')

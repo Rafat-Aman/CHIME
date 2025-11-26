@@ -1,54 +1,82 @@
 {% extends "base.html" %}
 {% load static %}
+
 {% block title %}Distributed Upload{% endblock %}
+
 {% block head %}
   {{ block.super }}
   <link rel="stylesheet" href="{% static 'drive_integration/css/uploads.css' %}">
 {% endblock %}
+
 {% block content %}
   {% csrf_token %}
+  
   <div class="upload-layout">
+    
     <div class="upload-panel">
+      
       <div class="page-head">
-        <div>
+        <div class="head-content">
           <h1>Distributed Upload</h1>
-          <p class="hint">Split a large file, send chunks to Google Drive accounts, and save the manifest for easy downloads.</p>
+          <p class="hint">Split large files, distribute chunks across Google Drive accounts, and generate a download manifest.</p>
         </div>
         <div class="page-actions">
-          <a class="btn-outline small" href="{% url 'downloads' %}">Go to Downloads</a>
+          <a class="btn-outline" href="{% url 'downloads' %}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+            View Downloads
+          </a>
         </div>
       </div>
 
       <div id="fileDropZone" class="drop-zone">
         <input type="file" id="fileInput" multiple hidden>
+        <div class="drop-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--brand)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+        </div>
         <p><strong>Drag & drop files here</strong> or <span class="browse-link" id="fileBrowseTrigger">browse</span></p>
-        <small>Supports multiple selections. Add more files anytime without losing your queue.</small>
+        <small>Supports multiple file selection.</small>
       </div>
 
       <div class="config-row">
-        <label>Chunk Size (MB):</label>
+        <div class="config-label">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:8px; color:var(--text-muted)"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+          <label for="chunkSize">Chunk Size (MB)</label>
+        </div>
         <input type="number" id="chunkSize" min="1" max="10240" value="500">
       </div>
 
       <div id="selected-files-wrapper" class="selected-files hidden">
-        <h4>Files queued</h4>
-        <ul id="selectedFilesList"></ul>
-        <p class="hint">Select a file to preview its info and adjust distribution sliders.</p>
+        <h4>Files Queued</h4>
+        <ul id="selectedFilesList">
+          </ul>
+        <p class="hint" style="margin-top:12px; font-size:0.85rem;">Click a file above to configure its distribution settings.</p>
       </div>
 
       <div id="file-info" class="hidden">
-        <p><strong>File size:</strong> <span id="file-size"></span></p>
-        <p><strong>Total chunks:</strong> <span id="total-chunks"></span></p>
-        <p><strong>File checksum:</strong> <span id="file-checksum">N/A</span></p>
+        <div class="info-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 16px;">
+            <div class="info-item">
+                <small style="color:var(--text-muted); display:block; margin-bottom:4px;">File Size</small>
+                <strong id="file-size" style="color:var(--text-main); font-size:1.1rem;">0 MB</strong>
+            </div>
+            <div class="info-item">
+                <small style="color:var(--text-muted); display:block; margin-bottom:4px;">Total Chunks</small>
+                <strong id="total-chunks" style="color:var(--text-main); font-size:1.1rem;">0</strong>
+            </div>
+            <div class="info-item">
+                <small style="color:var(--text-muted); display:block; margin-bottom:4px;">Checksum</small>
+                <strong id="file-checksum" style="color:var(--text-main); font-size:0.9rem; word-break:break-all;">Calculating...</strong>
+            </div>
+        </div>
       </div>
 
-      <h3>Accounts (max {{ max_accounts }})</h3>
+      <h3>Distribution Strategy <small style="font-weight:400; color:var(--text-muted); font-size:0.9rem; margin-left:8px;">(Max {{ max_accounts }} accounts)</small></h3>
+      
       <div id="accounts">
         {% for acc in google_accounts %}
           <div class="account-block" data-id="{{ acc.id }}" data-remaining="{{ acc.remaining }}">
             <div class="account-header">
               <span class="acc-email">{{ acc.email }}</span>
-              <span class="acc-space">Remaining: {{ acc.remaining }} | Max: <span class="acc-max">0</span> chunks</span>
+              <span class="acc-space">Space: {{ acc.remaining }} | Limit: <span class="acc-max">0</span> chunks</span>
             </div>
             <div class="slider-wrapper">
               <input type="range" class="chunk-slider" min="0" max="0" value="0">
@@ -57,26 +85,39 @@
             <span class="slider-value">0 chunks</span>
           </div>
         {% empty %}
-          <p class="hint">No Google accounts linked yet.</p>
+          <div class="empty-state" style="padding:30px; text-align:center; background:rgba(255,255,255,0.02); border-radius:12px; border:1px dashed var(--border);">
+            <p>No Google Drive accounts connected.</p>
+            <a href="{% url 'profile' %}" style="font-weight:600;">Connect Account +</a>
+          </div>
         {% endfor %}
       </div>
 
       <div id="total-warning" class="warning hidden"></div>
 
       <div class="summary">
-        <button id="uploadBtn" disabled>Start Upload</button>
+        <button id="uploadBtn" disabled>
+          Start Distributed Upload
+        </button>
       </div>
 
       <div id="uploadStatus" class="status-banner idle hidden">
-        <strong>Status:</strong> <span id="uploadStatusText">Idle</span>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:8px"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+        <span><strong>Status:</strong> <span id="uploadStatusText">Idle</span></span>
       </div>
     </div>
 
     <div class="progress-panel">
       <h2>Upload Progress</h2>
-      <p class="hint">Your current uploads will appear here.</p>
-      <div id="progressContainer"></div>
+      <p class="hint">Real-time status of chunk uploads across your connected accounts.</p>
+      
+      <div id="progressContainer">
+        <div style="text-align:center; padding:40px 0; color:var(--border);">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="opacity:0.3"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+            <p style="margin-top:10px; font-size:0.9rem; opacity:0.5;">Waiting for upload to start...</p>
+        </div>
+      </div>
     </div>
+
   </div>
 
   <script>
