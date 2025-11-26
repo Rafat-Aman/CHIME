@@ -237,7 +237,6 @@ input[type="number"]:focus {
 
 .chunk-slider {
   width: 100%;
-  -webkit-appearance: none;
   appearance: none;
   height: 6px;
   background: var(--border);
@@ -246,10 +245,10 @@ input[type="number"]:focus {
 }
 
 .chunk-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
   appearance: none;
   width: 18px;
   height: 18px;
+  background: var(--brand);
   background: var(--brand);
   border-radius: 50%;
   cursor: pointer;
@@ -448,6 +447,7 @@ button, .btn-outline {
 /* ---- Progress Panel Elements ---- */
 #progressContainer { margin-top: 24px; }
 
+/* ---- Progress ---- */
 .file-progress {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--border);
@@ -485,6 +485,7 @@ button, .btn-outline {
   background: var(--border);
   border-radius: 99px;
   overflow: hidden;
+  border: 1px solid var(--border);
 }
 
 .progress-inner {
@@ -521,6 +522,7 @@ button, .btn-outline {
 @media (max-width: 900px) {
   .upload-layout {
     flex-direction: column;
+    flex-wrap: wrap;
   }
   
   .upload-panel, 
