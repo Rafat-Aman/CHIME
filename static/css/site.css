@@ -343,11 +343,26 @@ body {
   justify-content: space-between;
   gap: 12px;
   margin: 12px 0 18px;
+  flex-wrap: wrap;
+}
+
+.page-head--dashboard {
+  align-items: flex-start;
+}
+
+.dashboard-layout {
+  /* leave space for the fixed donut on wide viewports */
+  padding-right: clamp(0px, 24vw, 80px);
 }
 
 .page-actions {
   display: flex;
   gap: 10px;
+}
+
+.page-actions .btn.small,
+.page-actions .btn-outline.small {
+  padding: 8px 12px;
 }
 
 .card {
@@ -485,6 +500,7 @@ body {
   display: grid;
   place-items: center;
   padding: 0 6px;
+  z-index: 1; /* keep text above the inner mask */
 }
 
 .donut-fig {
@@ -545,5 +561,8 @@ body {
   .disk-widget {
     position: static;
     margin: 12px auto 18px auto;
+  }
+  .dashboard-layout {
+    padding-right: 0;
   }
 }

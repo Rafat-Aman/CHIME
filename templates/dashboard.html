@@ -4,14 +4,15 @@
 {% block title %}Dashboard · CHIME{% endblock %}
 
 {% block content %}
-  <div class="page-head">
+<div class="dashboard-layout">
+  <div class="page-head page-head--dashboard">
     <h2>Dashboard</h2>
     <div class="page-actions">
-      <a class="btn-outline" href="{% url 'home' %}">Home</a>
-      <a class="btn-outline" href="{% url 'profile' %}">Profile</a>
-      <a class="btn-outline" href="{% url 'uploads' %}">Uploads</a>
-      <a class="btn btn-google" href="{% provider_login_url 'google' process='connect' %}">
-        <span class="g-icon"></span> Connect another Google account
+      <a class="btn-outline small" href="{% url 'home' %}">Home</a>
+      <a class="btn-outline small" href="{% url 'profile' %}">Profile</a>
+      <a class="btn-outline small" href="{% url 'uploads' %}">Uploads</a>
+      <a class="btn btn-google small" href="{% provider_login_url 'google' process='connect' %}">
+        <span class="g-icon"></span> Connect account
       </a>
     </div>
   </div>
@@ -22,13 +23,11 @@
     {% if total.limit_bytes %}
       <div class="donut" data-pct="{{ total.pct_used|default:0 }}">
         <div class="donut-center">
-          <div class="donut-fig">{{ total.avail_h }}</div>
-          <div class="donut-cap">free</div>
+          <div class="donut-cap">Used</div>
+          <div class="donut-fig">{{ total.used_h }}</div>
+          <div class="donut-sub">of {{ total.limit_h }}</div>
+          <div class="donut-cap">Free: {{ total.avail_h }}</div>
         </div>
-      </div>
-      <div class="disk-meta">
-        <div><strong>{{ total.used_h }}</strong> used</div>
-        <div class="muted">of {{ total.limit_h }} total</div>
       </div>
     {% else %}
       <div class="donut unlimited">
@@ -107,4 +106,5 @@
       donut.style.setProperty('--p', pct);
     })();
   </script>
+</div>
 {% endblock %}
