@@ -17,8 +17,9 @@ const toGB = b => (b / (1024 * 1024 * 1024)).toFixed(2);
 
 const isPhone = (/Mobi|Android/i.test(navigator.userAgent || "") && !/iPad/i.test(navigator.userAgent || ""))
   || ((typeof screen !== "undefined" && screen.width <= 768) && (navigator.maxTouchPoints || 0) > 1);
-const MAX_UPLOAD_BYTES = (isPhone ? 5 : 10) * 1024 * 1024 * 1024; // 5GB on phone, 10GB on desktop
-const MAX_CHUNK_MB = 50; // keep chunk size small enough to satisfy server memory limits
+const MAX_TOTAL_UPLOAD_MB = 5120; // 5GB per batch; tweak to raise/lower total upload cap
+const MAX_TOTAL_UPLOAD_BYTES = MAX_TOTAL_UPLOAD_MB * BYTES_PER_MB;
+const MAX_CHUNK_MB = 500; // keep chunk size small enough to satisfy server memory limits
 const chunkSizeInput = document.getElementById("chunkSize");
 const fileInput = document.getElementById("fileInput");
 const fileDropZone = document.getElementById("fileDropZone");
@@ -36,6 +37,247 @@ const accountBlocks = Array.from(document.querySelectorAll(".account-block"));
 const uploadStatusBanner = document.getElementById("uploadStatus");
 const uploadStatusText = document.getElementById("uploadStatusText");
 const removeFileBtn = document.getElementById("removeFileBtn");
+const noticeBox = warningEl; // shared notice box in the progress panel
+
+function setNotice(message, tone = "error") {
+  if (!noticeBox) return;
+  noticeBox.textContent = message || "";
+  noticeBox.classList.remove("hidden", "active", "success", "error");
+  if (!message) {
+    noticeBox.classList.add("hidden");
+    return;
+  }
+  if (tone === "success") noticeBox.classList.add("success");
+  else if (tone === "active") noticeBox.classList.add("active");
+  else noticeBox.classList.add("error");
+}
+//const noticeBox = warningEl; // shared notice box in the progress panel
+
+// ------------------------------------------------------------
+// Lightweight streaming SHA-256 (avoids loading huge files at once)
+// ------------------------------------------------------------
+const HASH_STREAM_CHUNK = 4 * BYTES_PER_MB; // 4MB slices keep memory small
+const HASH_BUFFER_THRESHOLD = 128 * BYTES_PER_MB; // use arrayBuffer for smaller blobs
+
+function sha256ToHex(buffer) {
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+async function sha256Hex(buffer) {
+  try {
+    const digest = await crypto.subtle.digest("SHA-256", buffer);
+    return sha256ToHex(digest);
+  } catch (err) {
+    // Fallback to pure JS if subtle.digest fails
+    console.warn("crypto.subtle.digest failed, falling back to pure JS", err);
+    const hasher = new Sha256();
+    hasher.update(new Uint8Array(buffer));
+    return sha256ToHex(hasher.digest());
+  }
+}
+
+class Sha256 {
+  constructor() {
+    this._state = new Uint32Array([
+      0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    ]);
+    this._buffer = new Uint8Array(64);
+    this._bufferLength = 0;
+    this._bytesHashed = 0;
+    this._finished = false;
+    this._work = new Uint32Array(64);
+  }
+
+  _rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+
+  _compress(chunk) {
+    const w = this._work;
+    for (let i = 0; i < 16; i += 1) {
+      w[i] = (
+        (chunk[i * 4] << 24) |
+        (chunk[i * 4 + 1] << 16) |
+        (chunk[i * 4 + 2] << 8) |
+        (chunk[i * 4 + 3])
+      ) >>> 0;
+    }
+    for (let i = 16; i < 64; i += 1) {
+      const s0 = (this._rotr(w[i - 15], 7) ^ this._rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3)) >>> 0;
+      const s1 = (this._rotr(w[i - 2], 17) ^ this._rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10)) >>> 0;
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+
+    let [a, b, c, d, e, f, g, h] = this._state;
+    const k = Sha256.K;
+    for (let i = 0; i < 64; i += 1) {
+      const S1 = (this._rotr(e, 6) ^ this._rotr(e, 11) ^ this._rotr(e, 25)) >>> 0;
+      const ch = ((e & f) ^ (~e & g)) >>> 0;
+      const temp1 = (h + S1 + ch + k[i] + w[i]) >>> 0;
+      const S0 = (this._rotr(a, 2) ^ this._rotr(a, 13) ^ this._rotr(a, 22)) >>> 0;
+      const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const temp2 = (S0 + maj) >>> 0;
+
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+
+    this._state[0] = (this._state[0] + a) >>> 0;
+    this._state[1] = (this._state[1] + b) >>> 0;
+    this._state[2] = (this._state[2] + c) >>> 0;
+    this._state[3] = (this._state[3] + d) >>> 0;
+    this._state[4] = (this._state[4] + e) >>> 0;
+    this._state[5] = (this._state[5] + f) >>> 0;
+    this._state[6] = (this._state[6] + g) >>> 0;
+    this._state[7] = (this._state[7] + h) >>> 0;
+  }
+
+  update(data) {
+    if (this._finished) throw new Error("SHA256: can't update finished hash");
+    let offset = 0;
+    while (offset < data.length) {
+      const space = 64 - this._bufferLength;
+      const take = Math.min(space, data.length - offset);
+      this._buffer.set(data.subarray(offset, offset + take), this._bufferLength);
+      this._bufferLength += take;
+      offset += take;
+      if (this._bufferLength === 64) {
+        this._compress(this._buffer);
+        this._bytesHashed += 64;
+        this._bufferLength = 0;
+      }
+    }
+    return this;
+  }
+
+  digest() {
+    if (this._finished) throw new Error("SHA256: digest already called");
+    this._bytesHashed += this._bufferLength;
+
+    // Pad
+    this._buffer[this._bufferLength] = 0x80;
+    this._bufferLength += 1;
+
+    if (this._bufferLength > 56) {
+      this._buffer.fill(0, this._bufferLength, 64);
+      this._compress(this._buffer);
+      this._bufferLength = 0;
+    }
+
+    this._buffer.fill(0, this._bufferLength, 56);
+    const bitsHi = Math.floor(this._bytesHashed / 0x20000000); // bytes * 8 / 2^32
+    const bitsLo = (this._bytesHashed << 3) >>> 0;
+    const view = new DataView(this._buffer.buffer);
+    view.setUint32(56, bitsHi >>> 0, false);
+    view.setUint32(60, bitsLo, false);
+    this._compress(this._buffer);
+
+    this._finished = true;
+    const out = new Uint8Array(32);
+    for (let i = 0; i < 8; i += 1) {
+      out[i * 4] = this._state[i] >>> 24;
+      out[i * 4 + 1] = (this._state[i] >>> 16) & 0xff;
+      out[i * 4 + 2] = (this._state[i] >>> 8) & 0xff;
+      out[i * 4 + 3] = this._state[i] & 0xff;
+    }
+    return out;
+  }
+}
+
+Sha256.K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+async function hashBlobStream(blob, onProgress) {
+  const total = blob.size || 0;
+  const hasher = new Sha256();
+  if (blob.stream && typeof blob.stream === "function") {
+    const reader = blob.stream().getReader();
+    let processed = 0;
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value && value.length) {
+        hasher.update(value instanceof Uint8Array ? value : new Uint8Array(value));
+        processed += value.length;
+        if (onProgress) onProgress(processed, total);
+      }
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return sha256ToHex(hasher.digest());
+  }
+
+  // Fallback if stream() is unavailable
+  let offset = 0;
+  while (offset < total) {
+    const slice = blob.slice(offset, offset + HASH_STREAM_CHUNK);
+    // eslint-disable-next-line no-await-in-loop
+    const buf = await slice.arrayBuffer();
+    hasher.update(new Uint8Array(buf));
+    offset += buf.byteLength;
+    if (onProgress) onProgress(offset, total);
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(resolve => setTimeout(resolve, 0));
+  }
+  return sha256ToHex(hasher.digest());
+}
+
+async function checksum(blob) {
+  // For moderate blobs, the built-in path is fastest; for very large blobs stream it.
+  if (blob.size <= HASH_BUFFER_THRESHOLD) {
+    try {
+      const buffer = await blob.arrayBuffer();
+      return sha256Hex(buffer);
+    } catch (err) {
+      console.warn("Direct checksum failed, falling back to streaming", err);
+    }
+  }
+  try {
+    return await hashBlobStream(blob);
+  } catch (streamErr) {
+    console.error("Streaming checksum failed", streamErr);
+    return "";
+  }
+}
+
+async function hashChunkAndAccumulate(blob, fileHasher) {
+  const chunkHasher = new Sha256();
+  if (blob.stream && typeof blob.stream === "function") {
+    const reader = blob.stream().getReader();
+    while (true) {
+      // eslint-disable-next-line no-await-in-loop
+      const { done, value } = await reader.read();
+      if (done) break;
+      const data = value instanceof Uint8Array ? value : new Uint8Array(value || []);
+      chunkHasher.update(data);
+      if (fileHasher) fileHasher.update(data);
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    return sha256ToHex(chunkHasher.digest());
+  }
+
+  // Fallback: buffer read (should be safe for smaller slices/chunks)
+  const buffer = await blob.arrayBuffer();
+  const view = new Uint8Array(buffer);
+  chunkHasher.update(view);
+  if (fileHasher) fileHasher.update(view);
+  return sha256ToHex(chunkHasher.digest());
+}
 
 let chunkSizeMB = Math.min(parseInt(chunkSizeInput?.value, 10) || 8, MAX_CHUNK_MB);
 if (chunkSizeInput) {
@@ -95,10 +337,8 @@ function parseRemainingMB(value) {
   return unit === "GB" ? val * 1024 : val;
 }
 
-function checksum(blob) {
-  return blob.arrayBuffer()
-    .then(buf => crypto.subtle.digest("SHA-256", buf))
-    .then(digest => Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join(""));
+function getTotalRemainingMB() {
+  return accountBlocks.reduce((sum, block) => sum + parseRemainingMB(block.dataset.remaining), 0);
 }
 
 function getActiveEntry() {
@@ -119,10 +359,8 @@ function renderFileChecksumDisplay(message) {
   }
   if (entry.checksum) {
     fileChecksumEl.textContent = entry.checksum;
-  } else if (entry.checksumPromise) {
-    fileChecksumEl.textContent = "Computing...";
   } else {
-    fileChecksumEl.textContent = "N/A";
+    fileChecksumEl.textContent = "Will compute during upload";
   }
 }
 
@@ -161,50 +399,14 @@ function renderFileList() {
 }
 
 function startEntryChecksum(entry) {
-  if (!entry || entry.checksum || entry.checksumPromise) {
-    renderFileChecksumDisplay();
-    return entry && entry.checksumPromise ? entry.checksumPromise : null;
-  }
-  const context = (entry.checksumContext || 0) + 1;
-  entry.checksumContext = context;
-  entry.checksumPromise = checksum(entry.file)
-    .then(hash => {
-      if (entry.checksumContext === context) {
-        entry.checksum = hash;
-        if (entry === getActiveEntry()) renderFileChecksumDisplay();
-      }
-      return hash;
-    })
-    .catch(err => {
-      console.error("File checksum failed", err);
-      if (entry.checksumContext === context) {
-        entry.checksum = "";
-        if (entry === getActiveEntry()) renderFileChecksumDisplay("Checksum failed");
-      }
-      return "";
-    })
-    .finally(() => {
-      if (entry.checksumContext === context) {
-        entry.checksumPromise = null;
-        if (entry === getActiveEntry() && !entry.checksum) renderFileChecksumDisplay();
-      }
-    });
+  // No-op: file checksum is computed during upload now to avoid heavy upfront hashing.
   renderFileChecksumDisplay();
-  return entry.checksumPromise;
+  return null;
 }
 
 async function ensureEntryChecksum(entry) {
-  if (!entry) return "";
-  if (entry.checksum) return entry.checksum;
-  if (!entry.checksumPromise) startEntryChecksum(entry);
-  if (entry.checksumPromise) {
-    try {
-      await entry.checksumPromise;
-    } catch (err) {
-      console.error("Checksum promise failed", err);
-    }
-  }
-  return entry.checksum || "";
+  // Keep for compatibility, but checksum is calculated during upload.
+  return entry && entry.checksum ? entry.checksum : "";
 }
 
 function setActiveFile(index) {
@@ -218,7 +420,6 @@ function setActiveFile(index) {
   activeFileIndex = clamped;
   updateFileInfo();
   renderFileList();
-  startEntryChecksum(getActiveEntry());
 }
 
 function removeActiveFile() {
@@ -255,7 +456,6 @@ function addFiles(fileList) {
   recalcTotals();
   renderFileList();
   updateFileInfo();
-  startEntryChecksum(getActiveEntry());
   updateUploadStatus("idle", "Files queued. Start upload when ready.");
 }
 
@@ -431,43 +631,44 @@ function validateTotals(extraRemainder) {
   const totalAssigned = Object.values(allocation).reduce((sum, val) => sum + val, 0);
 
   if (!fileEntries.length) {
-    warningEl.textContent = "Select one or more files to begin.";
-    warningEl.classList.remove("hidden");
+    setNotice("Select one or more files to begin.", "active");
     uploadBtn.disabled = true;
     return;
   }
   if (!chunkSizeBytes) {
-    warningEl.textContent = "Chunk size must be greater than zero.";
-    warningEl.classList.remove("hidden");
+    setNotice("Chunk size must be greater than zero.", "error");
     uploadBtn.disabled = true;
     return;
   }
-  if (totalBytesOverall > MAX_UPLOAD_BYTES) {
-    const limitGB = isPhone ? 5 : 10;
-    warningEl.textContent = `Upload limit exceeded: ${toGB(totalBytesOverall)} GB selected. Limit is ${limitGB} GB. Remove some files.`;
-    warningEl.classList.remove("hidden");
+  if (totalBytesOverall > MAX_TOTAL_UPLOAD_BYTES) {
+    const limitGB = (MAX_TOTAL_UPLOAD_BYTES / (1024 * 1024 * 1024)).toFixed(1);
+    setNotice(`Upload limit exceeded: ${toGB(totalBytesOverall)} GB selected. Limit is ${limitGB} GB. Remove some files.`, "error");
+    uploadBtn.disabled = true;
+    return;
+  }
+  const desiredMB = totalBytesOverall / BYTES_PER_MB;
+  const availableMB = getTotalRemainingMB();
+  if (desiredMB > availableMB) {
+    setNotice(`Not enough Drive quota: need ~${desiredMB.toFixed(1)} MB, available ~${availableMB.toFixed(1)} MB.`, "error");
     uploadBtn.disabled = true;
     return;
   }
   if (totalCapacityChunks < totalChunksOverall) {
-    warningEl.textContent = "Not enough available Drive space to cover this upload.";
-    warningEl.classList.remove("hidden");
+    setNotice("Not enough available Drive space to cover this upload.", "error");
     uploadBtn.disabled = true;
     return;
   }
   if (totalAssigned !== totalChunksOverall) {
-    warningEl.textContent = `Allocate exactly ${totalChunksOverall} chunk${totalChunksOverall === 1 ? "" : "s"} (~${(totalChunksOverall * chunkSizeMB).toFixed(1)} MB). Currently assigned: ${totalAssigned}.`;
-    warningEl.classList.remove("hidden");
+    setNotice(`Allocate exactly ${totalChunksOverall} chunk${totalChunksOverall === 1 ? "" : "s"} (~${(totalChunksOverall * chunkSizeMB).toFixed(1)} MB). Currently assigned: ${totalAssigned}.`, "active");
     uploadBtn.disabled = true;
     return;
   }
   if (extraRemainder && extraRemainder > 0 && extraRemainder !== Infinity) {
-    warningEl.textContent = "Unable to distribute chunks evenly. Adjust the sliders manually.";
-    warningEl.classList.remove("hidden");
+    setNotice("Unable to distribute chunks evenly. Adjust the sliders manually.", "active");
     uploadBtn.disabled = true;
     return;
   }
-  warningEl.classList.add("hidden");
+  setNotice("");
   uploadBtn.disabled = false;
 }
 
@@ -491,16 +692,24 @@ function updateBar(block, uploaded, total) {
   block.querySelector(".progress-text").textContent = `${toMB(uploaded)} / ${toMB(total)} MB`;
 }
 
+function triggerFilePicker(event) {
+  if (event) {
+    if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+  }
+  fileInput?.click();
+}
+
 if (fileBrowseTrigger) {
-  fileBrowseTrigger.addEventListener("click", e => {
-    e.preventDefault();
-    fileInput?.click();
-  });
+  fileBrowseTrigger.addEventListener("click", triggerFilePicker);
+  fileBrowseTrigger.addEventListener("keydown", triggerFilePicker);
 }
 
 if (fileDropZone) {
   fileDropZone.addEventListener("click", e => {
-    if (e.target !== fileInput) fileInput?.click();
+    if (e.target === fileInput) return;
+    e.preventDefault();
+    fileInput?.click();
   });
 
   ["dragenter", "dragover"].forEach(evt => {
@@ -536,15 +745,18 @@ removeFileBtn?.addEventListener("click", e => {
   removeActiveFile();
 });
 
-chunkSizeInput.addEventListener("input", e => {
-  const next = parseInt(e.target.value, 10);
-  if (Number.isNaN(next) || next <= 0) return;
-  chunkSizeMB = Math.min(next, MAX_CHUNK_MB);
-  chunkSizeInput.value = chunkSizeMB;
-  userAdjustedDistribution = false;
-  recalcTotals();
-  updateFileInfo();
-});
+if (chunkSizeInput) {
+  chunkSizeInput.addEventListener("input", e => {
+    const next = parseInt(e.target.value, 10);
+    if (Number.isNaN(next) || next <= 0) return;
+    chunkSizeMB = Math.min(next, MAX_CHUNK_MB);
+    chunkSizeInput.value = chunkSizeMB;
+    userAdjustedDistribution = false;
+    recalcTotals();
+    updateFileInfo();
+  });
+  chunkSizeInput.max = MAX_CHUNK_MB;
+}
 
 document.querySelectorAll(".chunk-slider").forEach(slider => {
   slider.addEventListener("input", e => {
@@ -571,14 +783,13 @@ document.querySelectorAll(".chunk-slider").forEach(slider => {
 
 uploadBtn.addEventListener("click", async () => {
   if (!fileEntries.length || uploadBtn.disabled) return;
-  if (!chunkSizeBytes) {
-    alert("Chunk size must be greater than zero.");
-    return;
-  }
+  // Double-check limits before starting
+  validateTotals();
+  if (uploadBtn.disabled) return;
   const allocation = readAllocationFromSliders();
   const allocatedChunks = Object.values(allocation).reduce((sum, val) => sum + val, 0);
   if (allocatedChunks !== totalChunksOverall) {
-    alert("Chunk allocation mismatch. Please adjust the sliders so they match the total upload size.");
+    setNotice("Chunk allocation mismatch. Please adjust the sliders so they match the total upload size.", "active");
     return;
   }
 
@@ -603,6 +814,7 @@ uploadBtn.addEventListener("click", async () => {
       const fileChunks = Math.max(1, Math.ceil(currentFile.size / chunkSizeBytes));
       const perFileAllocation = {};
       let remainingForFile = fileChunks;
+      const fileHasher = new Sha256();
 
       for (const block of accountBlocks) {
         if (!remainingForFile) break;
@@ -621,15 +833,6 @@ uploadBtn.addEventListener("click", async () => {
         fileSection.appendChild(warn);
         uploadHadErrors = true;
         break;
-      }
-
-      const overallChecksum = await ensureEntryChecksum(entry);
-      if (!overallChecksum) {
-        const warn = document.createElement("div");
-        warn.textContent = "Skipped — unable to compute file checksum.";
-        fileSection.appendChild(warn);
-        uploadHadErrors = true;
-        continue;
       }
 
       const manifest = [];
@@ -655,7 +858,7 @@ uploadBtn.addEventListener("click", async () => {
 
           let chunkHash = "";
           try {
-            chunkHash = await checksum(blob);
+            chunkHash = await hashChunkAndAccumulate(blob, fileHasher);
           } catch (err) {
             console.error("Chunk checksum failed", err);
           }
@@ -754,6 +957,23 @@ uploadBtn.addEventListener("click", async () => {
         fileSection.appendChild(note);
         uploadHadErrors = true;
         break;
+      }
+
+      let overallChecksum = "";
+      try {
+        overallChecksum = sha256ToHex(fileHasher.digest());
+        entry.checksum = overallChecksum;
+        if (entry === getActiveEntry()) renderFileChecksumDisplay();
+      } catch (err) {
+        console.error("Final file checksum failed", err);
+      }
+
+      if (!overallChecksum) {
+        const warn = document.createElement("div");
+        warn.textContent = "Skipped — unable to compute file checksum.";
+        fileSection.appendChild(warn);
+        uploadHadErrors = true;
+        continue;
       }
 
       const saveRes = await fetch(SAVE_MANIFEST_URL, {
