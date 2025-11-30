@@ -24,10 +24,171 @@ const formatDate = iso => {
   return date.toLocaleString();
 };
 
+// Keep hashing memory-safe for large merged downloads
+const HASH_STREAM_CHUNK = 4 * 1024 * 1024; // 4MB per read
+const HASH_BUFFER_THRESHOLD = 128 * 1024 * 1024; // up to 128MB use arrayBuffer, above stream
+
+function sha256ToHex(buffer) {
+  return Array.from(new Uint8Array(buffer)).map(b => b.toString(16).padStart(2, "0")).join("");
+}
+
+class Sha256 {
+  constructor() {
+    this._state = new Uint32Array([
+      0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+      0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    ]);
+    this._buffer = new Uint8Array(64);
+    this._bufferLength = 0;
+    this._bytesHashed = 0;
+    this._finished = false;
+    this._work = new Uint32Array(64);
+  }
+
+  _rotr(x, n) { return (x >>> n) | (x << (32 - n)); }
+
+  _compress(chunk) {
+    const w = this._work;
+    for (let i = 0; i < 16; i += 1) {
+      w[i] = (
+        (chunk[i * 4] << 24) |
+        (chunk[i * 4 + 1] << 16) |
+        (chunk[i * 4 + 2] << 8) |
+        (chunk[i * 4 + 3])
+      ) >>> 0;
+    }
+    for (let i = 16; i < 64; i += 1) {
+      const s0 = (this._rotr(w[i - 15], 7) ^ this._rotr(w[i - 15], 18) ^ (w[i - 15] >>> 3)) >>> 0;
+      const s1 = (this._rotr(w[i - 2], 17) ^ this._rotr(w[i - 2], 19) ^ (w[i - 2] >>> 10)) >>> 0;
+      w[i] = (w[i - 16] + s0 + w[i - 7] + s1) >>> 0;
+    }
+
+    let [a, b, c, d, e, f, g, h] = this._state;
+    const k = Sha256.K;
+    for (let i = 0; i < 64; i += 1) {
+      const S1 = (this._rotr(e, 6) ^ this._rotr(e, 11) ^ this._rotr(e, 25)) >>> 0;
+      const ch = ((e & f) ^ (~e & g)) >>> 0;
+      const temp1 = (h + S1 + ch + k[i] + w[i]) >>> 0;
+      const S0 = (this._rotr(a, 2) ^ this._rotr(a, 13) ^ this._rotr(a, 22)) >>> 0;
+      const maj = ((a & b) ^ (a & c) ^ (b & c)) >>> 0;
+      const temp2 = (S0 + maj) >>> 0;
+
+      h = g;
+      g = f;
+      f = e;
+      e = (d + temp1) >>> 0;
+      d = c;
+      c = b;
+      b = a;
+      a = (temp1 + temp2) >>> 0;
+    }
+
+    this._state[0] = (this._state[0] + a) >>> 0;
+    this._state[1] = (this._state[1] + b) >>> 0;
+    this._state[2] = (this._state[2] + c) >>> 0;
+    this._state[3] = (this._state[3] + d) >>> 0;
+    this._state[4] = (this._state[4] + e) >>> 0;
+    this._state[5] = (this._state[5] + f) >>> 0;
+    this._state[6] = (this._state[6] + g) >>> 0;
+    this._state[7] = (this._state[7] + h) >>> 0;
+  }
+
+  update(data) {
+    if (this._finished) throw new Error("SHA256: can't update finished hash");
+    let offset = 0;
+    while (offset < data.length) {
+      const space = 64 - this._bufferLength;
+      const take = Math.min(space, data.length - offset);
+      this._buffer.set(data.subarray(offset, offset + take), this._bufferLength);
+      this._bufferLength += take;
+      offset += take;
+      if (this._bufferLength === 64) {
+        this._compress(this._buffer);
+        this._bytesHashed += 64;
+        this._bufferLength = 0;
+      }
+    }
+    return this;
+  }
+
+  digest() {
+    if (this._finished) throw new Error("SHA256: digest already called");
+    this._bytesHashed += this._bufferLength;
+
+    this._buffer[this._bufferLength] = 0x80;
+    this._bufferLength += 1;
+
+    if (this._bufferLength > 56) {
+      this._buffer.fill(0, this._bufferLength, 64);
+      this._compress(this._buffer);
+      this._bufferLength = 0;
+    }
+
+    this._buffer.fill(0, this._bufferLength, 56);
+    const bitsHi = Math.floor(this._bytesHashed / 0x20000000);
+    const bitsLo = (this._bytesHashed << 3) >>> 0;
+    const view = new DataView(this._buffer.buffer);
+    view.setUint32(56, bitsHi >>> 0, false);
+    view.setUint32(60, bitsLo, false);
+    this._compress(this._buffer);
+
+    this._finished = true;
+    const out = new Uint8Array(32);
+    for (let i = 0; i < 8; i += 1) {
+      out[i * 4] = this._state[i] >>> 24;
+      out[i * 4 + 1] = (this._state[i] >>> 16) & 0xff;
+      out[i * 4 + 2] = (this._state[i] >>> 8) & 0xff;
+      out[i * 4 + 3] = this._state[i] & 0xff;
+    }
+    return out;
+  }
+}
+
+Sha256.K = new Uint32Array([
+  0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+  0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
+  0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+  0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
+  0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
+  0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+  0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
+  0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+]);
+
+async function hashBlobStream(blob) {
+  const total = blob.size || 0;
+  const hasher = new Sha256();
+  let offset = 0;
+  while (offset < total) {
+    const slice = blob.slice(offset, offset + HASH_STREAM_CHUNK);
+    // eslint-disable-next-line no-await-in-loop
+    const buf = await slice.arrayBuffer();
+    hasher.update(new Uint8Array(buf));
+    offset += buf.byteLength;
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(requestAnimationFrame);
+  }
+  return sha256ToHex(hasher.digest());
+}
+
 async function hashBlob(blob) {
-  const buffer = await blob.arrayBuffer();
-  const digest = await crypto.subtle.digest("SHA-256", buffer);
-  return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, "0")).join("");
+  try {
+    if (blob.size <= HASH_BUFFER_THRESHOLD) {
+      const buffer = await blob.arrayBuffer();
+      const digest = await crypto.subtle.digest("SHA-256", buffer);
+      return sha256ToHex(digest);
+    }
+    return await hashBlobStream(blob);
+  } catch (err) {
+    console.error("Checksum computation failed", err);
+    if (blob.size > HASH_BUFFER_THRESHOLD) return "";
+    try {
+      return await hashBlobStream(blob);
+    } catch (streamErr) {
+      console.error("Streaming checksum also failed", streamErr);
+      return "";
+    }
+  }
 }
 
 const manifestControllers = new Map();
@@ -198,7 +359,52 @@ function renderManifestCard(manifest) {
   meta.appendChild(created);
 
   const checksumMeta = document.createElement("div");
-  checksumMeta.textContent = `File hash: ${manifest.file_checksum || "N/A"}`;
+  checksumMeta.className = "manifest-hash";
+  const hashLabel = document.createElement("div");
+  hashLabel.className = "hash-label";
+  hashLabel.textContent = "File hash:";
+  const hashValue = document.createElement("code");
+  hashValue.className = "hash-value";
+  const hashText = manifest.file_checksum || "N/A";
+  hashValue.textContent = hashText;
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "copy-hash-btn";
+  copyBtn.innerHTML = `
+    <svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="9" y="9" width="11" height="13" rx="2" ry="2" fill="none" stroke-width="2" />
+      <rect x="4" y="4" width="11" height="13" rx="2" ry="2" fill="none" stroke-width="2" />
+    </svg>
+    <span class="copy-label">Copy</span>
+  `;
+  copyBtn.disabled = !manifest.file_checksum;
+  copyBtn.setAttribute("aria-label", "Copy file hash to clipboard");
+  copyBtn.addEventListener("click", async () => {
+    if (!manifest.file_checksum) return;
+    const label = copyBtn.querySelector(".copy-label");
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(manifest.file_checksum);
+      } else {
+        const helper = document.createElement("textarea");
+        helper.value = manifest.file_checksum;
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand("copy");
+        document.body.removeChild(helper);
+      }
+      copyBtn.classList.add("copied");
+      if (label) label.textContent = "Copied";
+      window.setTimeout(() => {
+        copyBtn.classList.remove("copied");
+        if (label) label.textContent = "Copy";
+      }, 1500);
+    } catch (err) {
+      console.error("Copy failed", err);
+      window.prompt("Copy hash", manifest.file_checksum);
+    }
+  });
+  checksumMeta.append(hashLabel, hashValue, copyBtn);
   meta.appendChild(checksumMeta);
 
   card.appendChild(meta);
