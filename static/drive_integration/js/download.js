@@ -359,7 +359,52 @@ function renderManifestCard(manifest) {
   meta.appendChild(created);
 
   const checksumMeta = document.createElement("div");
-  checksumMeta.textContent = `File hash: ${manifest.file_checksum || "N/A"}`;
+  checksumMeta.className = "manifest-hash";
+  const hashLabel = document.createElement("div");
+  hashLabel.className = "hash-label";
+  hashLabel.textContent = "File hash:";
+  const hashValue = document.createElement("code");
+  hashValue.className = "hash-value";
+  const hashText = manifest.file_checksum || "N/A";
+  hashValue.textContent = hashText;
+  const copyBtn = document.createElement("button");
+  copyBtn.type = "button";
+  copyBtn.className = "copy-hash-btn";
+  copyBtn.innerHTML = `
+    <svg class="copy-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <rect x="9" y="9" width="11" height="13" rx="2" ry="2" fill="none" stroke-width="2" />
+      <rect x="4" y="4" width="11" height="13" rx="2" ry="2" fill="none" stroke-width="2" />
+    </svg>
+    <span class="copy-label">Copy</span>
+  `;
+  copyBtn.disabled = !manifest.file_checksum;
+  copyBtn.setAttribute("aria-label", "Copy file hash to clipboard");
+  copyBtn.addEventListener("click", async () => {
+    if (!manifest.file_checksum) return;
+    const label = copyBtn.querySelector(".copy-label");
+    try {
+      if (navigator?.clipboard?.writeText) {
+        await navigator.clipboard.writeText(manifest.file_checksum);
+      } else {
+        const helper = document.createElement("textarea");
+        helper.value = manifest.file_checksum;
+        document.body.appendChild(helper);
+        helper.select();
+        document.execCommand("copy");
+        document.body.removeChild(helper);
+      }
+      copyBtn.classList.add("copied");
+      if (label) label.textContent = "Copied";
+      window.setTimeout(() => {
+        copyBtn.classList.remove("copied");
+        if (label) label.textContent = "Copy";
+      }, 1500);
+    } catch (err) {
+      console.error("Copy failed", err);
+      window.prompt("Copy hash", manifest.file_checksum);
+    }
+  });
+  checksumMeta.append(hashLabel, hashValue, copyBtn);
   meta.appendChild(checksumMeta);
 
   card.appendChild(meta);
