@@ -508,13 +508,22 @@ body {
   color: var(--muted);
 }
 
+/* =====================
+   TABLET & SMALL LAPTOP
+   ===================== */
 @media (max-width: 920px) {
+  .container {
+    padding: 0 18px;
+  }
+
   .site-navbar {
     flex-wrap: wrap;
   }
+
   .nav-toggle {
     display: inline-flex;
   }
+
   .nav-main {
     flex-direction: column;
     width: 100%;
@@ -523,27 +532,165 @@ body {
     padding-top: 12px;
     display: none;
   }
+
   .nav-main.open {
     display: flex;
     border-color: var(--border);
   }
+
   .primary-nav {
     flex-direction: column;
     width: 100%;
   }
+
   .nav-link {
     width: 100%;
+    text-align: left;
   }
+
   .nav-actions {
     width: 100%;
     justify-content: space-between;
   }
+
+  .page-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+
+  .account {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .site-footer .container {
     flex-direction: column;
     align-items: flex-start;
   }
+
   .disk-widget {
     position: static;
     margin: 12px auto 18px auto;
+    width: 100%;
+    max-width: 260px;
   }
 }
+
+/* =====================
+   SMALL PHONES
+   ===================== */
+@media (max-width: 600px) {
+  body {
+    font-size: 0.95rem;
+  }
+
+  .page-content {
+    padding-top: 20px;
+  }
+
+  .container {
+    padding: 0 14px;
+  }
+
+  .brand {
+    font-size: 1.15rem;
+  }
+
+  .hero {
+    padding: 20px 0;
+  }
+
+  .hero .lead {
+    max-width: 100%;
+  }
+
+  .actions {
+    flex-direction: column;
+  }
+
+  .actions .btn,
+  .actions .btn-outline {
+    width: 100%;
+  }
+
+  .card {
+    padding: 14px;
+  }
+
+  .card-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .account {
+    padding: 10px 12px;
+  }
+
+  .avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .disk-widget {
+    max-width: 220px;
+  }
+
+  .donut {
+    width: 150px;
+    height: 150px;
+  }
+
+  .donut::after {
+    width: 110px;
+    height: 110px;
+  }
+
+  .donut-fig {
+    font-size: 16px;
+  }
+
+  .donut-cap {
+    font-size: 11px;
+  }
+
+  .site-footer .container {
+    padding-inline: 14px;
+  }
+
+  .footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .footer-links a {
+    margin-left: 0;
+  }
+}
+
+/* =====================
+   LARGE SCREENS TWEAKS
+   ===================== */
+@media (min-width: 1280px) {
+  .container {
+    max-width: 1200px;
+  }
+
+  .hero {
+    padding: 36px 0;
+  }
+}
+

@@ -5,7 +5,6 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{% block title %}CHIME{% endblock %}</title>
-  
   <script>
     (function() {
       try {
@@ -19,7 +18,13 @@
       } catch (e) {}
     })();
   </script>
-
+  <style>
+    @media (max-width: 600px) {
+      .hero-title{
+        font-size: 18px;
+      }
+    }
+  </style>
   <link href="{% static 'css/site.css' %}" rel="stylesheet" />
   
   {% block head %}{% endblock %}
@@ -39,7 +44,7 @@
         <span></span>
       </button>
 
-      <div class="nav-main" data-nav-panel>
+      <div class="nav-main" style="padding-bottom: 8px;" data-nav-panel>
         
         <div class="primary-nav">
           <a class="nav-link {% if request.resolver_match.url_name == 'home' %}active{% endif %}" href="{% url 'home' %}">Home</a>

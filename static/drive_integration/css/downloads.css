@@ -1,90 +1,77 @@
-/* ---- Variables & Theme (Matches Upload Page) ---- */
-:root {
-  --bg: #0b0c0f;
-  --panel: #12141a;
-  --panel-hover: #181b24;
-  --text: #e7eaf0;
-  --muted: #9aa3b2;
-  --border: #1f2430;
-  
-  --brand: #4285f4;
-  --brand-hover: #3367d6;
-  
-  --danger: #ef4444;
-  --danger-bg: rgba(239, 68, 68, 0.15);
-  --success: #10b981;
-  --success-bg: rgba(16, 185, 129, 0.15);
-  --warning: #f59e0b;
-  --warning-bg: rgba(245, 158, 11, 0.15);
-  --info: #06b6d4;
-  --info-bg: rgba(6, 182, 212, 0.15);
-  
-  --radius: 16px;
-  --shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
-  
-  --font-main: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-}
+/* ---- Downloads Page (uses global site.css theme) ---- */
 
-/* ---- Global Reset & Typography ---- */
-* {
-  box-sizing: border-box;
-}
-
-body {
-  background-color: var(--bg);
-  color: var(--text);
-}
-
+/* Container */
 .downloads-container {
-  max-width: 960px;
+  max-width: 1100px;
   margin: 0 auto;
-  padding: 2.5rem 1.5rem;
-  font-family: Arial, sans-serif;
-  color: #1f1f1f;
+  padding: 32px 24px;
+  font-family: var(--font-main, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif);
 }
 
 .downloads-container h1 {
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.75rem;
   font-size: 2rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.5px;
 }
 
 .subtitle {
-  margin: 0 0 1.5rem;
-  color: #5a5a5a;
+  margin: 0 0 2.5rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+  line-height: 1.5;
 }
 
-.manifest-list {
+/* ---- Layout & Filters ---- */
+.download-filters {
   display: flex;
-  flex-direction: column;
-  gap: 1rem;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 24px;
+  background: var(--panel);
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
 }
 
-.status-banner {
+.download-filters label {
+  font-size: 0.9rem;
+  color: var(--text);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.download-filters select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.9rem;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.download-filters select:hover,
+.download-filters select:focus {
+  border-color: var(--brand);
+  box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.35);
+}
+
+.manifest-group {
+  font-weight: 600;
+  color: var(--brand);
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 2rem;
   margin-bottom: 1rem;
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid #cbd5f5;
-  background: #eef2ff;
-  font-size: 0.95rem;
-  color: #1f2a3d;
-}
-
-.status-banner.active {
-  border-color: #fbbf24;
-  background: #fff7e6;
-  color: #92400e;
-}
-
-.status-banner.success {
-  border-color: #a7f3d0;
-  background: #ecfdf5;
-  color: #065f46;
-}
-
-.status-banner.error {
-  border-color: #fecaca;
-  background: #fef2f2;
-  color: #991b1b;
+  padding-left: 4px;
 }
 
 /* ---- Manifest List & Cards ---- */
@@ -94,18 +81,19 @@ body {
   gap: 16px;
 }
 
-.manifest-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
+.manifest-card {
+  background-color: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  box-shadow: var(--shadow);
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
-.manifest-card {
-  border: 1px solid #e0e0e0;
-  border-radius: 12px;
-  padding: 1.25rem;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
-  background-color: #fff;
+.manifest-card:hover {
+  border-color: #343a46;
+  transform: translateY(-2px);
+  background: var(--panel-hover, rgba(255, 255, 255, 0.02));
 }
 
 .manifest-header {
@@ -115,7 +103,7 @@ body {
   margin-bottom: 16px;
 }
 
-/* Checkbox styling */
+/* Checkbox */
 .manifest-select {
   width: 20px;
   height: 20px;
@@ -124,12 +112,33 @@ body {
   margin-top: 4px; 
 }
 
+/* Meta row */
 .manifest-meta {
   display: flex;
   flex-wrap: wrap;
   gap: 12px 24px;
   font-size: 0.95rem;
-  color: #444;
+  color: var(--muted);
+  align-items: center;
+  width: 100%;
+}
+
+.manifest-meta strong {
+  color: var(--text);
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-right: auto;
+  display: block;
+  width: 100%;
+  margin-bottom: 4px;
+}
+
+.manifest-meta span {
+  background: var(--bg);
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
 }
 
 /* ---- Actions & Buttons ---- */
@@ -144,90 +153,130 @@ body {
 }
 
 .manifest-actions button {
-  background-color: #2563eb;
-  border: none;
-  color: #fff;
-  border-radius: 8px;
-  padding: 0.6rem 1.25rem;
-  font-size: 0.95rem;
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-size: 0.9rem;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: inherit;
+  border: 1px solid transparent;
+}
+
+/* Primary (Download) – match .btn theme */
+.manifest-actions button.download {
+  background-color: var(--brand);
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.2);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+.manifest-actions button.download:hover:not(:disabled) {
+  background-color: var(--brand-strong);
+  transform: translateY(-1px);
+}
+
+/* Health Check – neutral, like btn-outline */
+.manifest-actions button.health {
+  background-color: transparent;
+  border-color: var(--border);
+  color: var(--text);
+}
+.manifest-actions button.health:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.05);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+/* Delete – danger, aligns with site theme */
+.manifest-actions button.delete {
+  background-color: transparent;
+  border-color: var(--border);
+  color: var(--danger);
+  margin-left: auto; /* push delete to far right */
+}
+.manifest-actions button.delete:hover:not(:disabled) {
+  background-color: rgba(239, 68, 68, 0.12);
+  border-color: var(--danger);
 }
 
 .manifest-actions button:disabled {
-  background-color: #9db9ff;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
+  filter: grayscale(0.5);
 }
 
-.manifest-actions button:not(:disabled):hover {
-  background-color: #1e4fc7;
-}
-
-/* Delete */
-.manifest-actions button.delete {
-  background-color: #dc2626;
-}
-
-.manifest-actions button.delete:not(:disabled):hover {
-  background-color: #b91c1c;
-}
-
-.manifest-actions button.health {
-  background-color: #0f766e;
-}
-
-.manifest-actions button.health:not(:disabled):hover {
-  background-color: #115e57;
-}
-
-/* Top Page Actions (Bulk Delete) */
+/* Top Page Actions (Bulk Delete) – reuse same visual language */
 .page-actions .delete {
-  border-color: #dc2626;
-  color: #dc2626;
+  background-color: transparent;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+.page-actions .delete:hover:not(:disabled) {
+  background-color: var(--danger);
+  color: #fff;
 }
 .page-actions .delete:disabled {
-  border-color: #f5a5a5;
-  color: #f5a5a5;
+  border-color: var(--border);
+  color: var(--muted);
+  cursor: default;
 }
 
-.download-filters {
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-  align-items: center;
-  margin-bottom: 1rem;
-}
-
-.download-filters label {
+/* ---- Status Banners ---- */
+.status-banner {
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  border-radius: 10px;
   font-size: 0.9rem;
-  color: #444;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
 }
 
-.download-filters select {
-  border-radius: 8px;
-  border: 1px solid #d0d0d0;
-  padding: 0.3rem 0.6rem;
-  font-size: 0.9rem;
+.status-banner.active {
+  border-color: rgba(245, 158, 11, 0.3);
+  background: var(--warning-bg, rgba(245, 158, 11, 0.1));
+  color: var(--warning);
 }
 
-.manifest-group {
-  font-weight: 600;
-  color: #1f2937;
-  margin-top: 1.5rem;
-  margin-bottom: 0.5rem;
+.status-banner.success {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: var(--success-bg, rgba(16, 185, 129, 0.1));
+  color: var(--success);
+}
+
+.status-banner.error {
+  border-color: rgba(239, 68, 68, 0.3);
+  background: var(--danger-bg, rgba(239, 68, 68, 0.1));
+  color: var(--danger);
+}
+
+.status-banner.hidden {
+  display: none;
 }
 
 /* ---- Progress Bar ---- */
 .progress-track {
   position: relative;
-  height: 10px;
-  background-color: #e6ebff;
+  height: 8px;
+  background-color: var(--bg);
+  border: 1px solid var(--border);
   border-radius: 999px;
   overflow: hidden;
   flex: 1;
+  min-width: 120px;
 }
 
 .progress-fill {
@@ -236,36 +285,41 @@ body {
   left: 0;
   height: 100%;
   width: 0;
-  background-color: #34d399;
-  transition: width 0.2s ease;
+  background-color: var(--success);
+  transition: width 0.3s ease;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.4);
 }
 
 .status-text {
-  font-size: 0.9rem;
-  color: #555;
+  font-size: 0.85rem;
+  color: var(--muted);
+  white-space: nowrap;
 }
 
 /* ---- Health Block ---- */
 .health-block {
-  margin-top: 1rem;
-  padding: 1rem;
-  border: 1px solid #dbe3ff;
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--border);
   border-radius: 12px;
-  background-color: #f7f9ff;
+  background-color: var(--bg); /* distinct from card bg */
 }
 
 .health-summary {
   font-weight: 600;
-  color: #1f2937;
-  margin-bottom: 0.5rem;
+  color: var(--text);
+  margin-bottom: 10px;
+  font-size: 0.95rem;
 }
 
 .health-bar {
   position: relative;
   height: 10px;
   border-radius: 999px;
-  background-color: #e5e7eb;
+  background-color: var(--panel);
+  border: 1px solid var(--border);
   overflow: hidden;
+  margin-bottom: 12px;
 }
 
 .health-bar-fill {
@@ -295,63 +349,53 @@ body {
 }
 
 .chunk-pill.ok {
-  background-color: var(--success-bg);
-  border-color: rgba(16, 185, 129, 0.2);
+  background-color: var(--success-bg, rgba(16, 185, 129, 0.1));
+  border-color: rgba(16, 185, 129, 0.25);
   color: var(--success);
 }
 
 .chunk-pill.missing {
-  background-color: #fee2e2;
-  border-color: #fecaca;
-  color: #991b1b;
+  background-color: var(--danger-bg, rgba(239, 68, 68, 0.1));
+  border-color: rgba(239, 68, 68, 0.25);
+  color: var(--danger);
 }
 
-.chunk-pill.mismatch {
-  background-color: #fef3c7;
-  border-color: #fde68a;
-  color: #92400e;
-}
-
+.chunk-pill.mismatch,
 .chunk-pill.missing_metadata {
-  background-color: #fffbeb;
-  border-color: #fef3c7;
-  color: #92400e;
+  background-color: var(--warning-bg, rgba(245, 158, 11, 0.1));
+  border-color: rgba(245, 158, 11, 0.25);
+  color: var(--warning);
 }
 
 .chunk-pill.error {
-  background-color: #ede9fe;
-  border-color: #ddd6fe;
-  color: #5b21b6;
+  background-color: var(--info-bg, rgba(6, 182, 212, 0.12));
+  border-color: rgba(6, 182, 212, 0.25);
+  color: var(--info);
 }
 
-.chunk-pill.ok {
-  background-color: #dcfce7;
-  border-color: #bbf7d0;
-  color: #166534;
-}
-
+/* ---- Empty state ---- */
 .empty-state {
   text-align: center;
-  padding: 2rem 0;
-  color: #7b7b7b;
-  font-size: 1rem;
+  padding: 60px 0;
+  color: var(--muted);
+  font-size: 1.1rem;
+  background: var(--panel);
+  border-radius: var(--radius);
+  border: 1px dashed var(--border);
 }
 
+/* Utilities */
 .hidden {
   display: none !important;
 }
 
+/* ---- Mobile Responsiveness ---- */
 @media (max-width: 900px) {
-  .page-head {
-    flex-direction: column;
-  }
-
-  #downloadStatus {
-    position: static;
+  .downloads-container {
+    padding: 24px 18px;
   }
 }
 
-/* Mobile Responsiveness */
 @media (max-width: 768px) {
   .manifest-header {
     flex-wrap: wrap;
@@ -375,5 +419,24 @@ body {
   
   .manifest-actions button.delete {
     margin-left: 0;
+  }
+}
+
+@media (max-width: 600px) {
+  .downloads-container {
+    padding: 20px 14px;
+  }
+
+  .downloads-container h1 {
+    font-size: 1.6rem;
+  }
+
+  .subtitle {
+    margin-bottom: 1.8rem;
+    font-size: 0.98rem;
+  }
+
+  .manifest-card {
+    padding: 18px;
   }
 }

@@ -8,12 +8,12 @@
 {% block content %}
   {% csrf_token %}
   <div class="downloads-container">
-    <div class="page-head">
+    <div class="page-head" style="flex-wrap: wrap;">
       <div>
-        <h1>Your Uploaded Files</h1>
+        <h1 class="page-title">Your Uploaded Files</h1>
         <p class="subtitle">Select a file to pull each chunk from Drive and stitch it back together in your browser.</p>
       </div>
-      <div class="page-actions">
+      <div class="page-actions" style="flex-wrap: wrap;"> 
         <a class="btn-outline small" href="{% url 'uploads' %}">Back to Uploads</a>
         <button type="button" class="btn-outline small" id="selectAllManifests">Select All</button>
         <button type="button" class="btn-outline small" id="clearSelectedManifests">Clear</button>

@@ -12,6 +12,7 @@
     grid-template-columns: 2fr 1fr; /* Main content vs Sidebar */
     gap: 24px;
     margin-top: 24px;
+    align-items: flex-start;
   }
 
   /* Account List */
@@ -31,6 +32,7 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
+    gap: 16px;
     transition: all 0.2s ease;
   }
 
@@ -44,6 +46,7 @@
     display: flex;
     align-items: center;
     gap: 16px;
+    min-width: 0;
   }
 
   .account-avatar {
@@ -52,25 +55,34 @@
     border-radius: 50%;
     object-fit: cover;
     border: 2px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .account-details {
+    min-width: 0;
   }
 
   .account-details h4 {
     margin: 0;
     font-size: 1rem;
     color: var(--text-main);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .account-details p {
     margin: 2px 0 0;
     font-size: 0.85rem;
     color: var(--text-muted);
+    word-break: break-all;
   }
 
   /* Stats Grid inside Account Card */
   .quota-grid {
     display: grid;
     grid-template-columns: repeat(3, auto);
-    gap: 16px;
+    gap: 12px 16px;
     margin-top: 8px;
   }
 
@@ -154,33 +166,125 @@
     margin-top: 24px;
     padding-top: 16px;
     border-top: 1px solid var(--border);
+    gap: 16px;
   }
-  .storage-stat small { display: block; color: var(--text-muted); font-size: 0.8rem; }
-  .storage-stat strong { color: var(--text-main); font-size: 1rem; }
 
+  .storage-stat small {
+    display: block;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+  }
+  .storage-stat strong {
+    color: var(--text-main);
+    font-size: 1rem;
+  }
 
+  /* ========== RESPONSIVE ========== */
+
+  /* Medium screens: collapse dashboard grid to single column */
   @media (max-width: 900px) {
     .dashboard-grid {
       grid-template-columns: 1fr;
     }
+
+    .account-card {
+      flex-wrap: wrap;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .account-info{
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      margin: auto;
+    }
     .storage-widget {
-      order: -1; /* Put chart on top on mobile */
+      order: -1; /* Put chart on top on mobile/tablet */
       position: static;
       display: flex;
       align-items: center;
-      justify-content: space-around;
+      justify-content: space-between;
+      gap: 20px;
       padding: 20px;
       text-align: left;
     }
-    .donut { margin: 0; --size: 100px; }
-    .storage-meta { border: none; margin: 0; flex-direction: column; gap: 8px; text-align: right; }
+
+    .donut {
+      margin: 0;
+      --size: 120px;
+    }
+
+    .storage-meta {
+      border-top: none;
+      margin-top: 0;
+      padding-top: 0;
+      flex-direction: column;
+      align-items: flex-end;
+      text-align: right;
+    }
+  }
+
+  /* Narrow tablets / big phones: stack account card content better */
+  @media (max-width: 768px) {
+    .account-card {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .account-card form {
+      align-self: flex-end;
+    }
+
+    .quota-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* Small phones */
+  @media (max-width: 480px) {
+    .dashboard-grid {
+      gap: 16px;
+      margin-top: 16px;
+    }
+
+    .account-card {
+      padding: 16px;
+      gap: 12px;
+    }
+
+    .account-avatar {
+      width: 80px;
+      height: 80px;
+    }
+
+    .quota-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .storage-widget {
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .storage-meta {
+      align-items: center;
+      text-align: center;
+    }
+
+    .donut {
+      --size: 110px;
+      margin-bottom: 12px;
+    }
   }
 </style>
 {% endblock %}
 
 {% block content %}
   
-  <div class="page-head">
+  <div class="page-head" style="flex-wrap: wrap;">
     <div>
       <h1>Dashboard</h1>
       <p class="hint">Manage your connected storage accounts and monitor usage.</p>
